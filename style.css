@@ -1,0 +1,144 @@
+#qr-popup-close-btn,
+#qr-popup-close-btn * {
+    color: #ffffff !important;  /* 버튼 안 모든 요소 강제 흰색 */
+    fill: #ffffff !important;   /* SVG 아이콘이면 색상 강제 */
+}
+
+#qr-popup-container {
+    position: fixed;
+    top: 100px;
+    left: 100px;
+    min-width: 200px;
+    min-height: 150px;
+    max-height: 80vh;            /* 전체 팝업의 최대 높이 (뷰포트 기준) */
+    box-sizing: border-box;      /* 경계 포함 계산 */
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    z-index: 1500;
+    cursor: grab;
+    display: none;               /* 초기 숨김 유지 (토글 방식 권장) */
+    flex-direction: column;
+    overflow: hidden;            /* 내부 영역에서 스크롤 처리 */
+    resize: both;
+    background-color: var(--color-background-soft, #f4f6fa);
+    border: 1px solid var(--color-border, #e9edf6);
+    user-select: none;
+}
+
+#qr-popup-container.grabbing {
+    cursor: grabbing;
+}
+
+/* 팝업 헤더 */
+#qr-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    /* 💡 테마 색상 변수 사용 */
+    background-color: var(--qr-theme-color); 
+    color: white;
+    cursor: grab;
+    flex-shrink: 0;
+}
+#qr-popup-header-title {
+    font-size: 1.1rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 닫기 버튼 */
+#qr-popup-close-btn {
+    background: none;
+    border: none;
+    color: #ffffff !important; /* ✅ 항상 흰색으로 고정 */
+    font-size: 1.2rem;
+    cursor: pointer;
+    margin-left: 10px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    pointer-events: auto;
+}
+
+#qr-popup-close-btn:hover {
+    transform: rotate(90deg);
+    color: #ffffff !important; 
+}
+
+#qr-popup-content {
+    flex: 1 1 auto;  
+    min-height: 0;    
+    overflow-y: auto; 
+    padding: 15px;
+    background-color: var(--color-background, #ffffff);
+    box-sizing: border-box;
+}
+
+
+.popup-qr-button {
+    display: flex;
+    align-items: center;
+    padding: 8px 0px;
+    border-radius: 0; 
+    background-color: var(--color-bg-alt);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    
+    /* 점선 구분선 스타일링 */
+    border-bottom: 1px dotted var(--color-border, #e9edf6); 
+    padding-bottom: 8px; 
+    margin-bottom: 8px; 
+    
+    transition: background-color 0.15s ease, box-shadow 0.15s ease; 
+}
+
+#qr-popup-content .popup-qr-button:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.popup-qr-button:hover {
+    background-color: var(--color-bg-alt-hover, rgba(0, 0, 0, 0.05));
+    box-shadow: 0 0 5px var(--color-border, #e9edf6); 
+}
+
+.popup-qr-button .qr--button-icon {
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+
+/* -------------------------------------------------------------------------------- */
+/* 스크롤바 디자인 (웹킷 브라우저용) */
+/* -------------------------------------------------------------------------------- */
+
+#qr-popup-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+#qr-popup-content::-webkit-scrollbar-thumb {
+    /* 💡 소프트 테마 색상 변수 사용 */
+    background-color: var(--qr-theme-color-soft); 
+    border-radius: 4px;
+}
+
+#qr-popup-content::-webkit-scrollbar-track {
+    /* 배경색과 어울리게, 약간 어두운 색으로 트랙 설정 */
+    background-color: var(--color-bg-alt, #e9edf6); 
+}
+}
+
+.qr-placeholder, .qr-error {
+    text-align: center;
+    color: var(--color-text-alt);
+    margin-top: 15px;
+    font-style: italic;
+}
+.qr-error {
+    color: var(--color-red);
+    font-weight: bold;
+}

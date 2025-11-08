@@ -1,0 +1,12 @@
+{
+    "display_name": "Quick Reply Set Popup Opener",
+    "loading_order": 215,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "settings": "settings.html",
+    "author": "SillyGgu",
+    "version": "1.0.0",
+    "homePage": "https://github.com/SillyGgu/openQrSetInPopup"
+}
