@@ -1,66 +1,195 @@
 <div class="extension-block openqrsetinpopup-settings">
     <div class="inline-drawer">
-        <!-- 헤더 -->
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b>QR 팝업 확장</b>
+            <b>QR 팝업 설정</b>
         </div>
 
-        <!-- 내용 -->
         <div class="inline-drawer-content" style="padding: 10px 15px;">
-            <div class="control-group" style="display: flex; align-items: center; gap: 10px; justify-content: flex-start;">
-                <label for="qr_popup_theme_color" style="margin: 0; font-weight: 500; font-size: 0.9rem;">테마 색상:</label>
-                <input type="color" id="qr_popup_theme_color" value="#64B5F6" style="width: 35px; height: 30px; border-radius: 4px; border: 1px solid #ccc; padding: 0;">
+            
+            <div class="control-group">
+                <label for="qr_popup_theme_color">테마 색상:</label>
+                <input type="color" id="qr_popup_theme_color" style="width: 35px; height: 30px; border-radius: 4px; border: 1px solid #ccc; padding: 0;">
             </div>
+
+            <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
+
+            <div class="control-group">
+                <label>팝업 위치:</label>
+                <button id="qr_popup_reset_pos_btn" class="menu_button">
+                    <i class="fa-solid fa-arrows-to-circle"></i> 화면 중앙으로 초기화
+                </button>
+            </div>
+
+            <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
+
+            <div class="control-group">
+                <label for="qr_popup_lock_size" title="켜면 드래그로 크기 조절이 불가능해지고, 아래 입력한 크기로 고정됩니다.">
+                    수동 크기 고정 모드
+                </label>
+                <input type="checkbox" id="qr_popup_lock_size">
+            </div>
+
+            <div id="qr_popup_manual_size_inputs" style="margin-top: 8px; display: flex; gap: 10px; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label for="qr-popup-default-width" style="font-size: 0.8em;">가로(px):</label>
+                    <input type="number" id="qr-popup-default-width" class="text_pole" style="width: 70px;" min="100">
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label for="qr-popup-default-height" style="font-size: 0.8em;">세로(px):</label>
+                    <input type="number" id="qr-popup-default-height" class="text_pole" style="width: 70px;" min="100">
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
 
 <style>
-
 .openqrsetinpopup-settings {
     font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
     line-height: 1.4;
-    color: #4a4a4a;
+    color: var(--smart-theme-body-color, #4a4a4a);
 }
-
-/* 헤더 */
 .openqrsetinpopup-settings .inline-drawer-toggle b {
     font-weight: 600;
     font-size: 1rem;
     color: var(--qr-theme-color, #64B5F6);
     padding-right: 12px;
 }
-
-
-
-/* inline-drawer-content 박스 */
 .openqrsetinpopup-settings .inline-drawer-content {
-    background-color: #ffffff;
+    background-color: var(--smart-theme-bg, #ffffff);
     border-radius: 10px;
     box-shadow: 0 3px 8px rgba(0,0,0,0.06);
     padding: 10px 15px;
 }
-
-/* 컨트롤 그룹 컴팩트 */
 .openqrsetinpopup-settings .control-group {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 0;
+    margin: 5px 0;
+    flex-wrap: wrap;
 }
-
 .openqrsetinpopup-settings label {
     font-size: 0.9rem;
     font-weight: 500;
     margin: 0;
 }
-
-.openqrsetinpopup-settings input[type="color"] {
+.openqrsetinpopup-settings .menu_button {
+    padding: 5px 10px;
+    font-size: 0.85rem;
     cursor: pointer;
     border: 1px solid #ccc;
-    border-radius: 4px;
-    width: 35px;
-    height: 30px;
-    padding: 0;
+    border-radius: 5px;
+    background: #f0f0f0;
 }
+.openqrsetinpopup-settings .text_pole {
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+#qr_popup_reset_pos_btn.menu_button {
+    background-color: #4a90e2 !important;
+    border: 2px solid #3b7ac2 !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    box-sizing: border-box !important;
+
+    padding: 8px 14px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+}
+
+#qr_popup_reset_pos_btn.menu_button i {
+    color: #ffffff !important;
+}
+
+#qr_popup_reset_pos_btn.menu_button:hover {
+    background-color: #3f82cc !important;
+    border-color: #336eaf !important;
+}
+
+/* active */
+#qr_popup_reset_pos_btn.menu_button:active {
+    background-color: #366fab !important;
+    border-color: #2b598c !important;
+    transform: translateY(1px) !important;
+}
+
+#qr_popup_reset_pos_btn {
+    all: unset; 
+
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    background-color: #B0E0E6;
+    color: #ffffff !important;
+    border: 2px solid #3b7ac2;
+
+    padding: 7px 14px;
+    border-radius: 6px;
+
+    font-family: "Pretendard", "Noto Sans KR", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+
+    cursor: pointer;
+    box-sizing: border-box;
+
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+
+#qr_popup_reset_pos_btn.menu_button {
+    background: #B0E0E6 !important;
+    border: 2px solid #96C9D4 !important;
+    color: #000 !important;
+    border-radius: 8px !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+
+    padding: 8px 16px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+
+    cursor: pointer !important;
+    transition: 
+        background 0.35s ease,
+        border-color 0.35s ease,
+        transform 0.15s ease,
+        box-shadow 0.35s ease !important;
+}
+
+#qr_popup_reset_pos_btn.menu_button:hover {
+    background: linear-gradient(
+        135deg,
+        #B0E0E6 0%,
+        #C8F3DA 100%
+    ) !important;
+    border-color: #8BCAB8 !important;
+    box-shadow: 0 3px 10px rgba(180, 230, 220, 0.6) !important;
+    transform: translateY(-1px) !important;
+}
+
+#qr_popup_reset_pos_btn.menu_button:active {
+    background: #A9D4C6 !important;
+    border-color: #7FB6A8 !important;
+    transform: translateY(1px) !important;
+    box-shadow: none !important;
+}
+
+/* 아이콘 색 */
+#qr_popup_reset_pos_btn.menu_button i {
+    color: #000 !important;
+}
+
 </style>

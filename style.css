@@ -142,3 +142,8 @@
     color: var(--color-red);
     font-weight: bold;
 }
+
+/* 크기 고정 모드일 때 리사이즈 핸들 숨김 */
+#qr-popup-container.no-resize {
+    resize: none !important;
+}

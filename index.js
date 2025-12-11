@@ -4,13 +4,14 @@ import { extension_settings } from '../../../extensions.js';
 const extensionName = 'openQrSetInPopup';
 const DEFAULT_POS = { top: 100, left: 100 };
 const DEFAULT_SIZE = { width: 400, height: 250 };
-const DEFAULT_THEME_COLOR = '#64B5F6'; // 💡 추가: 기본 테마 색상 (style.css와 일치)
+const DEFAULT_THEME_COLOR = '#64B5F6'; 
 
 const DEFAULT_SETTINGS = {
     pos: DEFAULT_POS,
     width: DEFAULT_SIZE.width,
     height: DEFAULT_SIZE.height,
-    themeColor: DEFAULT_THEME_COLOR, // 💡 추가: 테마 색상 설정
+    themeColor: DEFAULT_THEME_COLOR,
+    lockSize: false, 
 };
 
 let settings;
@@ -29,7 +30,7 @@ function onQrApiReady(callback) {
 }
 
 // =================================================================================
-// 2. 팝업 UI 생성
+// 2. 팝업 UI 생성 (수정됨: lockSize 반영)
 // =================================================================================
 function createQrPopup() {
     const popupHTML = `
@@ -57,6 +58,11 @@ function createQrPopup() {
         width: settings.width,
         height: settings.height,
     });
+
+    // 💡 저장된 설정이 크기 고정이면 클래스 추가
+    if (settings.lockSize) {
+        $popup.addClass('no-resize');
+    }
 
     // 닫기 버튼
     $closeBtn.on('click', () => {
@@ -242,34 +248,38 @@ function handleCtxMenuClick(event) {
     extension_settings[extensionName] = extension_settings[extensionName] || DEFAULT_SETTINGS;
     settings = extension_settings[extensionName];
 
+    // 설정 무결성 검사
     if (!settings.pos || !settings.pos.top) settings.pos = DEFAULT_POS;
     if (!settings.width) settings.width = DEFAULT_SIZE.width;
     if (!settings.height) settings.height = DEFAULT_SIZE.height;
-    if (!settings.themeColor) settings.themeColor = DEFAULT_THEME_COLOR; // 💡 테마 색상 초기화
+    if (!settings.themeColor) settings.themeColor = DEFAULT_THEME_COLOR;
+    if (typeof settings.lockSize === 'undefined') settings.lockSize = false; // 💡 신규 설정 초기화
 
-    applyThemeColor(settings.themeColor); // 💡 확장 기능 로드 시 테마 색상 적용
+    applyThemeColor(settings.themeColor);
 
     createQrPopup();
     $('body').on('mousedown', '.list-group.ctx-menu .ctx-item', handleCtxMenuClick);
     
-    // 💡 SETTINGS UI INITIALIZATION BLOCK (jQuery를 사용하여 settings.html을 로드하고 이벤트 바인딩)
+    // 💡 SETTINGS UI INITIALIZATION BLOCK
     if (window.jQuery) {
         try {
-            // settings.html을 로드할 확장 경로를 설정 (index.js에서 사용된 패턴)
             const settingsHtml = await window.jQuery.get(`${extensionFolderPath}/settings.html`);
             window.jQuery("#extensions_settings2").append(settingsHtml);
             
-            // 💡 이벤트 바인딩
+            // 이벤트 바인딩
             window.jQuery('#qr-popup-default-width').on('input', onSettingsInput);
             window.jQuery('#qr-popup-default-height').on('input', onSettingsInput);
-            window.jQuery('#qr_popup_theme_color').on('input', onThemeColorInput); // 💡 테마 색상 이벤트 바인딩 추가
+            window.jQuery('#qr_popup_theme_color').on('input', onThemeColorInput);
+            
+            // 💡 추가된 기능 이벤트 바인딩
+            window.jQuery('#qr_popup_reset_pos_btn').on('click', resetPopupPosition);
+            window.jQuery('#qr_popup_lock_size').on('change', onLockSizeChange);
 
-            // 최종 UI 로드
+            // UI 값 로드
             loadSettingsUI();
             
         } catch (error) {
-            // settings.html이 없을 경우를 대비한 경고
-            console.warn(`[${extensionName}] settings.html 불러오기 실패. 설정 UI가 로드되지 않을 수 있습니다.`, error);
+            console.warn(`[${extensionName}] settings.html 불러오기 실패.`, error);
         }
     }
 })();
@@ -280,14 +290,62 @@ function handleCtxMenuClick(event) {
 // =================================================================================
 
 /**
- * HEX 색상에서 rgba(r, g, b, 0.7) 형태의 부드러운 색상을 생성합니다.
- * @param {string} hex - #RRGGBB 형태의 16진수 색상.
- * @returns {string} rgba(r, g, b, 0.7) 형태의 문자열.
+ * 💡 [신규] 팝업 위치를 화면 중앙으로 초기화합니다.
  */
+function resetPopupPosition() {
+    const $popup = $('#qr-popup-container');
+    const winWidth = $(window).width();
+    const winHeight = $(window).height();
+    
+    // 현재 팝업 크기 (설정값 기준)
+    const pWidth = settings.width || 400;
+    const pHeight = settings.height || 250;
+
+    // 중앙 좌표 계산
+    const newLeft = Math.max(0, (winWidth - pWidth) / 2);
+    const newTop = Math.max(0, (winHeight - pHeight) / 2);
+
+    // 설정 업데이트
+    settings.pos = { top: newTop, left: newLeft };
+    
+    // 팝업이 생성되어 있다면 즉시 이동
+    if ($popup.length) {
+        $popup.css({ top: newTop, left: newLeft });
+    }
+
+    saveSettingsDebounced();
+    
+    // 사용자 피드백 (Toast 등 사용 가능하지만 여기선 간단히 로그)
+    console.log(`[${extensionName}] 팝업 위치가 중앙으로 초기화되었습니다.`);
+    alert('팝업 위치가 화면 중앙으로 초기화되었습니다.'); // 필요 시 toast로 변경 가능
+}
+
+/**
+ * 💡 [신규] 크기 고정 모드 토글 핸들러
+ */
+function onLockSizeChange() {
+    const isLocked = $(this).is(':checked');
+    settings.lockSize = isLocked;
+    
+    const $popup = $('#qr-popup-container');
+    const $inputs = $('#qr_popup_manual_size_inputs input');
+
+    if (isLocked) {
+        $popup.addClass('no-resize');
+        // 고정 모드 진입 시, 현재 입력 필드의 값으로 크기 강제 적용
+        $popup.css({
+            width: settings.width + 'px',
+            height: settings.height + 'px'
+        });
+    } else {
+        $popup.removeClass('no-resize');
+    }
+
+    saveSettingsDebounced();
+}
+
 function hexToRgbaSoft(hex) {
     let r = 0, g = 0, b = 0;
-
-    // 3자리 또는 6자리 HEX를 파싱합니다.
     if (hex.length === 4) {
         r = parseInt(hex[1] + hex[1], 16);
         g = parseInt(hex[2] + hex[2], 16);
@@ -297,24 +355,15 @@ function hexToRgbaSoft(hex) {
         g = parseInt(hex.substring(3, 5), 16);
         b = parseInt(hex.substring(5, 7), 16);
     }
-
     return `rgba(${r}, ${g}, ${b}, 0.7)`;
 }
 
-
-/**
- * 팝업의 테마 색상(헤더 및 스크롤바)을 CSS 변수에 적용합니다.
- * @param {string} color - #RRGGBB 형태의 16진수 색상.
- */
 function applyThemeColor(color) {
     const softColor = hexToRgbaSoft(color);
     document.documentElement.style.setProperty('--qr-theme-color', color);
     document.documentElement.style.setProperty('--qr-theme-color-soft', softColor);
 }
 
-/**
- * 테마 색상 입력값 변경 시 호출되어 설정과 CSS 변수에 반영합니다.
- */
 function onThemeColorInput() {
     const color = window.jQuery(this).val();
     settings.themeColor = color;
@@ -323,16 +372,20 @@ function onThemeColorInput() {
 }
 
 /**
- * 설정 UI에 현재 저장된 너비/높이 값을 로드합니다.
+ * 설정 UI에 현재 저장된 값들을 로드합니다.
  */
 function loadSettingsUI() {
+    // 크기
     window.jQuery('#qr-popup-default-width').val(settings.width);
     window.jQuery('#qr-popup-default-height').val(settings.height);
-    window.jQuery('#qr_popup_theme_color').val(settings.themeColor); // 💡 테마 색상 로드 추가
+    // 색상
+    window.jQuery('#qr_popup_theme_color').val(settings.themeColor);
+    // 💡 잠금 상태
+    window.jQuery('#qr_popup_lock_size').prop('checked', settings.lockSize);
 }
 
 /**
- * 설정 입력값 변경 시 호출되어 설정과 DOM에 반영합니다.
+ * 너비/높이 입력값 변경 시 호출
  */
 function onSettingsInput() {
     const $input = window.jQuery(this);
@@ -340,19 +393,20 @@ function onSettingsInput() {
     
     let value = parseInt($input.val());
     
-    if (isNaN(value) || value < 100) { // 최소값 설정 (임의로 100px)
-        value = 100;
-        $input.val(100);
+    if (isNaN(value) || value < 100) { 
+        value = 100; // 최소값 방어
     }
     
-    // 팝업 생성 시 사용될 설정 값 업데이트
     settings[key] = value;
     
-    // 현재 열려있는 팝업의 크기도 즉시 업데이트 (선택 사항)
-    const $popup = window.jQuery('#qr-popup-container');
-    if ($popup.length) {
-        $popup.css(key, `${value}px`);
-        updatePopupContentHeight(); // 크기 변경에 따라 내용 높이 재계산
+    // 💡 크기 고정 모드일 때만, 입력 즉시 팝업 크기에 반영
+    // (고정 모드가 아닐 땐 드래그가 우선이므로 즉시 반영 안 함 or 해도 무관하지만 UX상 고정일 때가 중요)
+    if (settings.lockSize) {
+        const $popup = window.jQuery('#qr-popup-container');
+        if ($popup.length) {
+            $popup.css(key, `${value}px`);
+            updatePopupContentHeight(); 
+        }
     }
 
     saveSettingsDebounced();
