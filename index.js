@@ -11,7 +11,8 @@ const DEFAULT_SETTINGS = {
     width: DEFAULT_SIZE.width,
     height: DEFAULT_SIZE.height,
     themeColor: DEFAULT_THEME_COLOR,
-    lockSize: false, 
+    lockSize: false,
+    mobileMode: false,
 };
 
 let settings;
@@ -179,17 +180,26 @@ function openQrSetPopup(command) {
     const $popup = $('#qr-popup-container');
     const $popupContent = $('#qr-popup-content');
 
-    // 팝업 표시
-    $popup.show().css({
-        top: settings.pos.top,
-        left: settings.pos.left,
-        width: settings.width,
-        height: settings.height,
-    });
+    // 💡 모바일 모드 설정 확인 및 클래스 적용
+    if (settings.mobileMode) {
+        $popup.addClass('mobile-layout');
+        // 모바일 모드에서는 top/left/width/height를 JS로 설정하지 않고 CSS(.mobile-layout)에 맡김
+        $popup.show();
+    } else {
+        $popup.removeClass('mobile-layout');
+        // 일반 모드에서는 저장된 위치/크기 적용
+        $popup.show().css({
+            top: settings.pos.top,
+            left: settings.pos.left,
+            width: settings.width,
+            height: settings.height,
+        });
+    }
+
     $('#qr-popup-header-title').text(setName);
     $popupContent.empty().append($('<p class="qr-placeholder">QR 세트 로딩 중...</p>'));
 
-    updatePopupContentHeight(); // ✅ 팝업 표시 직후 높이 맞춤
+    updatePopupContentHeight(); 
 
     onQrApiReady((api) => {
         try {
@@ -218,7 +228,7 @@ function openQrSetPopup(command) {
                 $popupContent.append($button);
             });
 
-            updatePopupContentHeight(); // ✅ 내용 로드 후 다시 계산
+            updatePopupContentHeight(); 
         } catch (error) {
             console.error(`[${extensionName}] QR 세트 로드 중 오류:`, error);
             $popupContent.empty().append($('<p class="qr-error">QR 세트 로드 중 오류 발생. 콘솔 확인.</p>'));
@@ -240,7 +250,6 @@ function handleCtxMenuClick(event) {
         openQrSetPopup(command);
     }
 }
-
 // =================================================================================
 // 7. 진입점
 // =================================================================================
@@ -260,7 +269,6 @@ function handleCtxMenuClick(event) {
     createQrPopup();
     $('body').on('mousedown', '.list-group.ctx-menu .ctx-item', handleCtxMenuClick);
     
-    // 💡 SETTINGS UI INITIALIZATION BLOCK
     if (window.jQuery) {
         try {
             const settingsHtml = await window.jQuery.get(`${extensionFolderPath}/settings.html`);
@@ -271,9 +279,10 @@ function handleCtxMenuClick(event) {
             window.jQuery('#qr-popup-default-height').on('input', onSettingsInput);
             window.jQuery('#qr_popup_theme_color').on('input', onThemeColorInput);
             
-            // 💡 추가된 기능 이벤트 바인딩
             window.jQuery('#qr_popup_reset_pos_btn').on('click', resetPopupPosition);
             window.jQuery('#qr_popup_lock_size').on('change', onLockSizeChange);
+            
+            window.jQuery('#qr_popup_mobile_mode').on('change', onMobileModeChange);
 
             // UI 값 로드
             loadSettingsUI();
@@ -289,9 +298,7 @@ function handleCtxMenuClick(event) {
 // 8. 설정 UI 기능 (New/Modified)
 // =================================================================================
 
-/**
- * 💡 [신규] 팝업 위치를 화면 중앙으로 초기화합니다.
- */
+
 function resetPopupPosition() {
     const $popup = $('#qr-popup-container');
     const winWidth = $(window).width();
@@ -315,7 +322,6 @@ function resetPopupPosition() {
 
     saveSettingsDebounced();
     
-    // 사용자 피드백 (Toast 등 사용 가능하지만 여기선 간단히 로그)
     console.log(`[${extensionName}] 팝업 위치가 중앙으로 초기화되었습니다.`);
     alert('팝업 위치가 화면 중앙으로 초기화되었습니다.'); // 필요 시 toast로 변경 가능
 }
@@ -380,8 +386,10 @@ function loadSettingsUI() {
     window.jQuery('#qr-popup-default-height').val(settings.height);
     // 색상
     window.jQuery('#qr_popup_theme_color').val(settings.themeColor);
-    // 💡 잠금 상태
+    // 잠금 상태
     window.jQuery('#qr_popup_lock_size').prop('checked', settings.lockSize);
+    // 모바일 모드 상태
+    window.jQuery('#qr_popup_mobile_mode').prop('checked', settings.mobileMode);
 }
 
 /**
@@ -399,8 +407,7 @@ function onSettingsInput() {
     
     settings[key] = value;
     
-    // 💡 크기 고정 모드일 때만, 입력 즉시 팝업 크기에 반영
-    // (고정 모드가 아닐 땐 드래그가 우선이므로 즉시 반영 안 함 or 해도 무관하지만 UX상 고정일 때가 중요)
+
     if (settings.lockSize) {
         const $popup = window.jQuery('#qr-popup-container');
         if ($popup.length) {
@@ -409,5 +416,33 @@ function onSettingsInput() {
         }
     }
 
+    saveSettingsDebounced();
+}
+
+/**
+ * 💡 모바일 모드 변경 핸들러
+ */
+function onMobileModeChange() {
+    const isMobileMode = $(this).is(':checked');
+    settings.mobileMode = isMobileMode;
+    
+    const $popup = $('#qr-popup-container');
+    
+    if (isMobileMode) {
+        $popup.addClass('mobile-layout');
+        // 모바일 모드 진입 시 강제로 스타일 재계산 (필요시)
+        $popup.css({ top: '', left: '', width: '', height: '' }); 
+    } else {
+        $popup.removeClass('mobile-layout');
+        // 모바일 모드 해제 시 기존 저장된 위치/크기로 복구
+        $popup.css({
+            top: settings.pos.top,
+            left: settings.pos.left,
+            width: settings.width,
+            height: settings.height
+        });
+    }
+    
+    updatePopupContentHeight();
     saveSettingsDebounced();
 }

@@ -7,37 +7,53 @@
         <div class="inline-drawer-content" style="padding: 10px 15px;">
             
             <div class="control-group">
-                <label for="qr_popup_theme_color">테마 색상:</label>
-                <input type="color" id="qr_popup_theme_color" style="width: 35px; height: 30px; border-radius: 4px; border: 1px solid #ccc; padding: 0;">
+                <label for="qr_popup_theme_color" style="flex: 1;">테마 색상</label>
+                <input type="color" id="qr_popup_theme_color" style="width: 40px; height: 30px; border-radius: 4px; border: 1px solid #ccc; padding: 0; cursor: pointer;">
             </div>
 
             <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
 
             <div class="control-group">
-                <label>팝업 위치:</label>
+                <label style="flex: 1;">팝업 위치 초기화</label>
                 <button id="qr_popup_reset_pos_btn" class="menu_button">
-                    <i class="fa-solid fa-arrows-to-circle"></i> 화면 중앙으로 초기화
+                    <i class="fa-solid fa-arrows-to-circle"></i> 화면 중앙으로
                 </button>
             </div>
 
             <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
 
-            <div class="control-group">
+            <div class="control-group" style="justify-content: space-between;">
                 <label for="qr_popup_lock_size" title="켜면 드래그로 크기 조절이 불가능해지고, 아래 입력한 크기로 고정됩니다.">
                     수동 크기 고정 모드
                 </label>
-                <input type="checkbox" id="qr_popup_lock_size">
+                <label class="qr-toggle-switch">
+                    <input type="checkbox" id="qr_popup_lock_size">
+                    <span class="qr-toggle-slider"></span>
+                </label>
             </div>
 
-            <div id="qr_popup_manual_size_inputs" style="margin-top: 8px; display: flex; gap: 10px; align-items: center;">
+            <div id="qr_popup_manual_size_inputs" style="margin-top: 8px; display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
                 <div style="display: flex; align-items: center; gap: 5px;">
-                    <label for="qr-popup-default-width" style="font-size: 0.8em;">가로(px):</label>
+                    <label for="qr-popup-default-width" style="font-size: 0.8em; color: #666;">가로(px):</label>
                     <input type="number" id="qr-popup-default-width" class="text_pole" style="width: 70px;" min="100">
                 </div>
                 <div style="display: flex; align-items: center; gap: 5px;">
-                    <label for="qr-popup-default-height" style="font-size: 0.8em;">세로(px):</label>
+                    <label for="qr-popup-default-height" style="font-size: 0.8em; color: #666;">세로(px):</label>
                     <input type="number" id="qr-popup-default-height" class="text_pole" style="width: 70px;" min="100">
                 </div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
+
+            <div class="control-group" style="justify-content: space-between;">
+                <div style="flex: 1;">
+                    <label for="qr_popup_mobile_mode" style="display: block;">모바일 레이아웃 모드</label>
+                    <small style="color: #888; font-size: 0.8em;">활성화 시 채팅창 너비에 맞춰 중앙에 고정됩니다.</small>
+                </div>
+                <label class="qr-toggle-switch">
+                    <input type="checkbox" id="qr_popup_mobile_mode">
+                    <span class="qr-toggle-slider"></span>
+                </label>
             </div>
 
         </div>
@@ -66,130 +82,39 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 5px 0;
+    margin: 8px 0;
     flex-wrap: wrap;
 }
 .openqrsetinpopup-settings label {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 500;
     margin: 0;
+    cursor: pointer;
 }
 .openqrsetinpopup-settings .menu_button {
-    padding: 5px 10px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    background: #f0f0f0;
-}
-.openqrsetinpopup-settings .text_pole {
-    padding: 4px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-}
-
-#qr_popup_reset_pos_btn.menu_button {
-    background-color: #4a90e2 !important;
-    border: 2px solid #3b7ac2 !important;
-    color: #ffffff !important;
-    border-radius: 8px !important;
-
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    box-sizing: border-box !important;
-
-    padding: 8px 14px !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    cursor: pointer !important;
-}
-
-#qr_popup_reset_pos_btn.menu_button i {
-    color: #ffffff !important;
-}
-
-#qr_popup_reset_pos_btn.menu_button:hover {
-    background-color: #3f82cc !important;
-    border-color: #336eaf !important;
-}
-
-/* active */
-#qr_popup_reset_pos_btn.menu_button:active {
-    background-color: #366fab !important;
-    border-color: #2b598c !important;
-    transform: translateY(1px) !important;
-}
-
-#qr_popup_reset_pos_btn {
-    all: unset; 
-
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-
-    background-color: #B0E0E6;
-    color: #ffffff !important;
-    border: 2px solid #3b7ac2;
-
-    padding: 7px 14px;
-    border-radius: 6px;
-
-    font-family: "Pretendard", "Noto Sans KR", sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1;
-
-    cursor: pointer;
-    box-sizing: border-box;
-
-    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-}
-
-
-#qr_popup_reset_pos_btn.menu_button {
     background: #B0E0E6 !important;
     border: 2px solid #96C9D4 !important;
     color: #000 !important;
     border-radius: 8px !important;
-
     display: inline-flex !important;
     align-items: center !important;
     gap: 8px !important;
-
-    padding: 8px 16px !important;
-    font-size: 14px !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
     font-weight: 600 !important;
-
     cursor: pointer !important;
-    transition: 
-        background 0.35s ease,
-        border-color 0.35s ease,
-        transform 0.15s ease,
-        box-shadow 0.35s ease !important;
+    transition: all 0.2s ease;
+    flex-direction: row !important;  
+    white-space: nowrap !important; 
 }
-
-#qr_popup_reset_pos_btn.menu_button:hover {
-    background: linear-gradient(
-        135deg,
-        #B0E0E6 0%,
-        #C8F3DA 100%
-    ) !important;
-    border-color: #8BCAB8 !important;
-    box-shadow: 0 3px 10px rgba(180, 230, 220, 0.6) !important;
-    transform: translateY(-1px) !important;
+.openqrsetinpopup-settings .menu_button:hover {
+    filter: brightness(0.95);
+    transform: translateY(-1px);
 }
-
-#qr_popup_reset_pos_btn.menu_button:active {
-    background: #A9D4C6 !important;
-    border-color: #7FB6A8 !important;
-    transform: translateY(1px) !important;
-    box-shadow: none !important;
+.openqrsetinpopup-settings .text_pole {
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    text-align: center;
 }
-
-/* 아이콘 색 */
-#qr_popup_reset_pos_btn.menu_button i {
-    color: #000 !important;
-}
-
 </style>

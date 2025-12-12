@@ -147,3 +147,90 @@
 #qr-popup-container.no-resize {
     resize: none !important;
 }
+
+/* ================================================================================= */
+/* 💡 토글 스위치 디자인 */
+/* ================================================================================= */
+.qr-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.qr-toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.qr-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.qr-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.qr-toggle-switch input:checked + .qr-toggle-slider {
+    background-color: var(--qr-theme-color, #64B5F6);
+}
+
+.qr-toggle-switch input:checked + .qr-toggle-slider:before {
+    transform: translateX(18px);
+}
+
+/* ================================================================================= */
+/* 💡 모바일 모드 (Mobile Layout) 스타일 */
+/* ================================================================================= */
+/* JS에서 .mobile-layout 클래스를 붙였을 때 동작 */
+#qr-popup-container.mobile-layout {
+    position: fixed !important;
+    
+    /* 화면 중앙 정렬 (가로) */
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    
+    /* 너비는 화면 꽉 차게 */
+    width: 95% !important;
+    max-width: 600px !important; /* 태블릿 등에서 너무 커지지 않게 제한 */
+    
+    /* 높이는 내용물에 따라 유동적이나 최대 높이 제한 */
+    height: auto !important;
+    min-height: 150px !important;
+    max-height: 70vh !important;
+    
+    /* 상단 위치는 적당히 띄움 (JS 좌표 무시) */
+    top: 80px !important; 
+    
+    /* 모바일 편의성 */
+    resize: none !important; 
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    z-index: 2000 !important;
+}
+
+#qr-popup-container.mobile-layout #qr-popup-content {
+    /* 모바일에서는 스크롤이 더 잘 되도록 */
+    max-height: 60vh !important; 
+}
+
