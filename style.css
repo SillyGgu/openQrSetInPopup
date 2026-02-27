@@ -1,109 +1,122 @@
 #qr-popup-close-btn,
 #qr-popup-close-btn * {
-    color: #ffffff !important;  /* 버튼 안 모든 요소 강제 흰색 */
-    fill: #ffffff !important;   /* SVG 아이콘이면 색상 강제 */
+    color: #ffffff !important;  
+    fill: #ffffff !important;   
 }
 
 #qr-popup-container {
     position: fixed;
     top: 100px;
     left: 100px;
-    min-width: 200px;
+    min-width: 220px;
     min-height: 150px;
-    max-height: 80vh;            /* 전체 팝업의 최대 높이 (뷰포트 기준) */
-    box-sizing: border-box;      /* 경계 포함 계산 */
-    border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    max-height: 80vh;
+    box-sizing: border-box;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
     z-index: 1500;
     cursor: grab;
-    display: none;               /* 초기 숨김 유지 (토글 방식 권장) */
+    display: none;
     flex-direction: column;
-    overflow: hidden;            /* 내부 영역에서 스크롤 처리 */
+    overflow: hidden;
     resize: both;
-    background-color: var(--color-background-soft, #f4f6fa);
-    border: 1px solid var(--color-border, #e9edf6);
+    background-color: var(--color-background-soft, #f8f9fc);
+    border: 1px solid rgba(0,0,0,0.08);
     user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
+
 
 #qr-popup-container.grabbing {
     cursor: grabbing;
 }
 
-/* 팝업 헤더 */
+
 #qr-popup-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 15px;
-    /* 💡 테마 색상 변수 사용 */
-    background-color: var(--qr-theme-color); 
+    padding: 12px 16px;
+    background-color: var(--qr-theme-color);
+    background-image: linear-gradient(135deg, var(--qr-theme-color) 0%, color-mix(in srgb, var(--qr-theme-color) 80%, #000) 100%);
     color: white;
     cursor: grab;
     flex-shrink: 0;
+    letter-spacing: 0.01em;
 }
 #qr-popup-header-title {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.15);
 }
 
-/* 닫기 버튼 */
+
 #qr-popup-close-btn {
-    background: none;
+    background: rgba(255,255,255,0.15);
     border: none;
-    color: #ffffff !important; /* ✅ 항상 흰색으로 고정 */
-    font-size: 1.2rem;
+    color: #ffffff !important;
+    font-size: 1rem;
     cursor: pointer;
     margin-left: 10px;
-    transition: transform 0.2s;
+    transition: background 0.2s, transform 0.2s;
     flex-shrink: 0;
     pointer-events: auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #qr-popup-close-btn:hover {
+    background: rgba(255,255,255,0.3);
     transform: rotate(90deg);
-    color: #ffffff !important; 
+    color: #ffffff !important;
 }
 
 #qr-popup-content {
-    flex: 1 1 auto;  
-    min-height: 0;    
-    overflow-y: auto; 
-    padding: 15px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px 12px;
     background-color: var(--color-background, #ffffff);
     box-sizing: border-box;
 }
 
-
 .popup-qr-button {
     display: flex;
     align-items: center;
-    padding: 8px 0px;
-    border-radius: 0; 
-    background-color: var(--color-bg-alt);
+    padding: 11px 12px;
+    border-radius: 8px;
+    background-color: var(--color-background, #ffffff);
     cursor: pointer;
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    
-    /* 점선 구분선 스타일링 */
-    border-bottom: 1px dotted var(--color-border, #e9edf6); 
-    padding-bottom: 8px; 
-    margin-bottom: 8px; 
-    
-    transition: background-color 0.15s ease, box-shadow 0.15s ease; 
+    border: 1px solid rgba(0,0,0,0.07);
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+    margin-bottom: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+    font-size: 0.93rem;
+    line-height: 1.5;
+    color: var(--smart-theme-body-color, #222);
 }
 
 #qr-popup-content .popup-qr-button:last-child {
-    border-bottom: none;
+    border-bottom: 1px solid rgba(0,0,0,0.07);
     margin-bottom: 0;
 }
-
 .popup-qr-button:hover {
-    background-color: var(--color-bg-alt-hover, rgba(0, 0, 0, 0.05));
-    box-shadow: 0 0 5px var(--color-border, #e9edf6); 
+    background-color: var(--color-bg-alt-hover, rgba(0,0,0,0.03));
+    box-shadow: 0 3px 10px rgba(0,0,0,0.10);
+    transform: translateY(-1px);
 }
 
 .popup-qr-button .qr--button-icon {
@@ -112,22 +125,20 @@
 }
 
 
-/* -------------------------------------------------------------------------------- */
-/* 스크롤바 디자인 (웹킷 브라우저용) */
-/* -------------------------------------------------------------------------------- */
+
+
+
 
 #qr-popup-content::-webkit-scrollbar {
     width: 8px;
 }
 
 #qr-popup-content::-webkit-scrollbar-thumb {
-    /* 💡 소프트 테마 색상 변수 사용 */
-    background-color: var(--qr-theme-color-soft); 
+    background-color: color-mix(in srgb, var(--qr-theme-color-soft, #64B5F6) 60%, transparent);
     border-radius: 4px;
 }
-
 #qr-popup-content::-webkit-scrollbar-track {
-    /* 배경색과 어울리게, 약간 어두운 색으로 트랙 설정 */
+    
     background-color: var(--color-bg-alt, #e9edf6); 
 }
 }
@@ -143,14 +154,14 @@
     font-weight: bold;
 }
 
-/* 크기 고정 모드일 때 리사이즈 핸들 숨김 */
+
 #qr-popup-container.no-resize {
     resize: none !important;
 }
 
-/* ================================================================================= */
-/* 💡 토글 스위치 디자인 */
-/* ================================================================================= */
+
+
+
 .qr-toggle-switch {
     position: relative;
     display: inline-block;
@@ -199,30 +210,30 @@
     transform: translateX(18px);
 }
 
-/* ================================================================================= */
-/* 💡 모바일 모드 (Mobile Layout) 스타일 */
-/* ================================================================================= */
-/* JS에서 .mobile-layout 클래스를 붙였을 때 동작 */
+
+
+
+
 #qr-popup-container.mobile-layout {
     position: fixed !important;
     
-    /* 화면 중앙 정렬 (가로) */
+    
     left: 50% !important;
     transform: translateX(-50%) !important;
     
-    /* 너비는 화면 꽉 차게 */
-    width: 95% !important;
-    max-width: 600px !important; /* 태블릿 등에서 너무 커지지 않게 제한 */
     
-    /* 높이는 내용물에 따라 유동적이나 최대 높이 제한 */
+    width: 95% !important;
+    max-width: 600px !important; 
+    
+    
     height: auto !important;
     min-height: 150px !important;
     max-height: 70vh !important;
     
-    /* 상단 위치는 적당히 띄움 (JS 좌표 무시) */
+    
     top: 80px !important; 
     
-    /* 모바일 편의성 */
+    
     resize: none !important; 
     border-radius: 12px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.25);
@@ -230,7 +241,106 @@
 }
 
 #qr-popup-container.mobile-layout #qr-popup-content {
-    /* 모바일에서는 스크롤이 더 잘 되도록 */
+    
     max-height: 60vh !important; 
 }
 
+
+
+
+
+#qr-helper-toolbar-btn {
+    position: absolute;
+    top: -22px;
+    left: 10px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 13px;
+    cursor: pointer;
+    z-index: 200;
+    color: var(--smart-theme-body-color, #888);
+    background-color: var(--SmartThemeBlurTintColor, rgba(255,255,255,0.9));
+    border-radius: 4px 4px 0 0;
+    border: 1px solid var(--SmartThemeBlurTintColor, #ccc);
+    border-bottom: none;
+    opacity: 0.8;
+    transition: all 0.2s;
+}
+
+#qr-helper-toolbar-btn:hover {
+    opacity: 1;
+    color: var(--qr-theme-color, #64B5F6);
+    padding-bottom: 2px;
+}
+
+body.qr-extension-active div[id^="script_container_"] {
+    display: none !important;
+}
+
+.popup-qr-button,
+#qr-popup-content .qr--button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+
+    width: 100% !important;
+    min-height: 40px;
+    margin: 0 0 6px 0 !important;
+    padding: 10px 12px !important;
+
+    font-weight: 400 !important;
+    font-size: 0.93rem !important;
+    line-height: 1.5 !important;
+    color: var(--smart-theme-body-color, #222222) !important;
+    background-color: var(--color-background, #ffffff) !important;
+
+    border: 1px solid rgba(0,0,0,0.07) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease !important;
+}
+
+.popup-qr-button:hover,
+#qr-popup-content .qr--button:hover {
+    background-color: var(--color-bg-alt-hover, rgba(0,0,0,0.03)) !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.10) !important;
+    transform: translateY(-1px) !important;
+}
+
+
+.popup-qr-button .qr--button-icon,
+#qr-popup-content .qr--button .qr--button-icon {
+    margin-right: 8px !important; 
+    flex-shrink: 0;
+    width: auto !important; 
+    text-align: center;
+    color: var(--qr-theme-color, #64B5F6);
+    display: inline-block;
+}
+
+
+.popup-qr-button .qr--button-icon.qr--hidden,
+#qr-popup-content .qr--button .qr--button-icon.qr--hidden,
+#qr-popup-content .qr--button .qr--button-icon:empty {
+    display: none !important;
+    margin: 0 !important;
+    width: 0 !important;
+}
+
+.popup-qr-button .qr--button-label,
+#qr-popup-content .qr--button .qr--button-label {
+    flex: 1;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.popup-qr-button:last-child,
+#qr-popup-content .qr--button:last-child {
+    border-bottom: none !important;
+}
