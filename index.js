@@ -13,11 +13,48 @@ const DEFAULT_SETTINGS = {
     themeColor: DEFAULT_THEME_COLOR,
     lockSize: false,
     mobileMode: false,
+    showQrHelper: true 
 };
 
 let settings;
 let scriptObserver = null;
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`; 
+
+// =================================================================================
+// 0. 스타일 주입 (복사 버튼용 CSS)
+// =================================================================================
+function injectStyles() {
+    const styleId = 'qr-popup-extra-styles';
+    if ($(`#${styleId}`).length) return;
+
+    const css = `
+        .popup-qr-button {
+            position: relative;
+            display: flex;
+            align-items: center;
+            /* 기존 스타일과의 호환성을 위해 flex 사용 */
+        }
+        .qr-copy-btn {
+            margin-left: auto; /* 우측 끝으로 밀기 */
+            padding: 5px 10px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left: 1px solid rgba(255,255,255,0.1);
+        }
+        .qr-copy-btn:hover {
+            opacity: 1;
+            background-color: rgba(255,255,255,0.1);
+        }
+        .qr-copy-btn i {
+            pointer-events: none;
+        }
+    `;
+    $('head').append(`<style id="${styleId}">${css}</style>`);
+}
 
 // =================================================================================
 // 1. QR API 준비 대기
@@ -49,6 +86,20 @@ function restoreScriptButtons() {
     });
 }
 
+function updateToolbarButtonVisibility() {
+    const $btn = $('#qr-helper-toolbar-btn');
+    
+    const buttonsInContainers = $('div[id^="script_container_"] .qr--button').length;
+    
+    const buttonsInPopup = $('#qr-popup-content .qr--button[data-origin-id]').length;
+
+    if (buttonsInContainers + buttonsInPopup > 0) {
+        $btn.show();
+    } else {
+        $btn.hide();
+    }
+}
+
 function initScriptObserver() {
     $('body').addClass('qr-extension-active');
 
@@ -57,19 +108,41 @@ function initScriptObserver() {
 
     const config = { childList: true, subtree: true };
     const callback = function(mutationsList) {
+        let shouldUpdate = false;
+        
         for(const mutation of mutationsList) {
             if (mutation.type === 'childList') {
                 mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1 && node.id && node.id.startsWith('script_container_')) {
-                        $(node).addClass('script-container-managed');
+                    if (node.nodeType === 1) {
+                        if (node.id && node.id.startsWith('script_container_')) {
+                            $(node).addClass('script-container-managed');
+                            shouldUpdate = true;
+                        }
+                        if ($(node).hasClass('qr--button') || $(node).find('.qr--button').length > 0) {
+                            shouldUpdate = true;
+                        }
+                    }
+                });
+
+                mutation.removedNodes.forEach(node => {
+                    if (node.nodeType === 1) {
+                        if ((node.id && node.id.startsWith('script_container_')) || 
+                            $(node).hasClass('qr--button') || 
+                            $(node).find('.qr--button').length > 0) {
+                            shouldUpdate = true;
+                        }
                     }
                 });
             }
         }
+        
+        updateToolbarButtonVisibility();
     };
 
     scriptObserver = new MutationObserver(callback);
     scriptObserver.observe(targetNode, config);
+    
+    updateToolbarButtonVisibility();
 }
 
 // =================================================================================
@@ -203,7 +276,7 @@ function setupDragAndResize($popup, $header) {
 }
 
 // =================================================================================
-// 5. 일반 QR 세트 팝업
+// 5. 일반 QR 세트 팝업 (복사 기능 추가)
 // =================================================================================
 function openQrSetPopup(command) {
     restoreScriptButtons(); 
@@ -243,15 +316,48 @@ function openQrSetPopup(command) {
             qrSet.qrList.forEach(qr => {
                 const $button = $('<div class="popup-qr-button">');
                 $button.attr('title', qr.command || qr.label);
+                
                 const $icon = $(`<div class="qr--button-icon fa-solid ${qr.icon || 'qr--hidden'}"></div>`);
                 const $label = $(`<div class="qr--button-label"></div>`).text(qr.label);
-                $button.append($icon, $label);
+                
+                const $copyBtn = $('<div class="qr-copy-btn" title="내용 복사"><i class="fa-solid fa-copy"></i></div>');
+
+                $copyBtn.on('click', function(e) {
+                    e.stopPropagation(); 
+                    e.preventDefault();
+                    
+                    const contentToCopy = qr.message; 
+                    
+                    if (contentToCopy) {
+                        navigator.clipboard.writeText(contentToCopy).then(() => {
+                            if (window.toastr) {
+                                window.toastr.success('클립보드에 복사되었습니다.', 'QR 복사 완료');
+                            } else {
+                                alert('복사되었습니다!');
+                            }
+                            
+                            const $icon = $(this).find('i');
+                            $icon.removeClass('fa-copy').addClass('fa-check');
+                            setTimeout(() => {
+                                $icon.removeClass('fa-check').addClass('fa-copy');
+                            }, 1000);
+                        }).catch(err => {
+                            console.error('복사 실패:', err);
+                            if (window.toastr) window.toastr.error('복사에 실패했습니다.');
+                        });
+                    } else {
+                        if (window.toastr) window.toastr.warning('복사할 내용이 없습니다 (Execute 전용 QR일 수 있음).');
+                    }
+                });
+
+                $button.append($icon, $label, $copyBtn);
 
                 $button.on('click', function(e) {
                     e.stopPropagation();
                     e.preventDefault();
                     api.executeQuickReply(qrSet.name, qr.label);
                 });
+                
                 $popupContent.append($button);
             });
             updatePopupContentHeight(); 
@@ -323,26 +429,157 @@ function openScriptPopup() {
 }
 
 // =================================================================================
+// 6.5. QR 도우미 팝업
+// =================================================================================
+function openQrHelperPopup() {
+    const $popup = $('#qr-popup-container');
+    const $headerTitle = $('#qr-popup-header-title');
+    
+    if ($popup.is(':visible') && $headerTitle.text() === "QR 도우미") {
+        $('#qr-popup-close-btn').click();
+        return;
+    }
+
+    restoreScriptButtons(); 
+
+    const $popupContent = $('#qr-popup-content');
+
+    if (settings.mobileMode) {
+        $popup.addClass('mobile-layout');
+        $popup.css({ top: '', left: '', width: '', height: '' });
+    } else {
+        $popup.removeClass('mobile-layout');
+        $popup.css({
+            top: settings.pos.top,
+            left: settings.pos.left,
+            width: settings.width,
+            height: settings.height,
+        });
+    }
+    $popup.show();
+    $headerTitle.text("QR 도우미");
+    $popupContent.empty();
+
+    // -----------------------------------------------------------
+    // 1. 플레이스홀더 치환 도구 ({{char}} <-> {{user}})
+    // -----------------------------------------------------------
+    const $swapSection = $('<div class="qr-helper-section">');
+    $swapSection.append('<div class="qr-helper-label">플레이스홀더 치환</div>');
+    
+    const $swapBtn = $('<button class="qr-helper-action-btn"><i class="fa-solid fa-right-left"></i> {{char}} ↔ {{user}} 변환</button>');
+    
+    $swapBtn.on('click', function() {
+        const $textarea = $('#send_textarea');
+        let text = $textarea.val();
+
+        if (!text) {
+            if (window.toastr) window.toastr.warning('입력창이 비어있습니다.');
+            return;
+        }
+
+        if (text.includes('{{char}}') || text.includes('{{user}}')) {
+            const TEMP_TOKEN = '###_QR_TEMP_TOKEN_###';
+            text = text.replaceAll('{{char}}', TEMP_TOKEN);
+            text = text.replaceAll('{{user}}', '{{char}}');
+            text = text.replaceAll(TEMP_TOKEN, '{{user}}');
+
+            $textarea.val(text);
+            $textarea.trigger('input'); 
+
+            if (window.toastr) window.toastr.success('치환 완료!');
+        } else {
+            if (window.toastr) window.toastr.info('변환할 태그({{char}}, {{user}})가 없습니다.');
+        }
+    });
+    $swapSection.append($swapBtn);
+    $popupContent.append($swapSection);
+
+    // -----------------------------------------------------------
+    // 2. 언어 프롬프트 복사 도구
+    // -----------------------------------------------------------
+    const $langSection = $('<div class="qr-helper-section">');
+    $langSection.append('<div class="qr-helper-label">언어 지정 프롬프트 복사</div>');
+    
+    const languages = [
+        { label: 'English', text: 'respond in ENGLISH!' },
+        { label: 'Japanese', text: 'respond in JAPANESE!' },
+        { label: 'Korean', text: 'respond in KOREAN!' },
+        { label: 'Chinese', text: 'respond in CHINESE!' }
+    ];
+
+    const $langGrid = $('<div class="qr-lang-grid"></div>');
+
+    languages.forEach(lang => {
+        const $btn = $(`<button class="qr-lang-btn">${lang.label}</button>`);
+        $btn.on('click', function() {
+            navigator.clipboard.writeText(lang.text).then(() => {
+                if (window.toastr) window.toastr.success(`"${lang.text}" 복사 완료`);
+                
+                // 버튼 시각 효과
+                const originalText = $btn.text();
+                $btn.text('Copied!');
+                $btn.addClass('copied');
+                setTimeout(() => {
+                    $btn.text(originalText);
+                    $btn.removeClass('copied');
+                }, 1000);
+            });
+        });
+        $langGrid.append($btn);
+    });
+
+    $langSection.append($langGrid);
+    $popupContent.append($langSection);
+
+    updatePopupContentHeight();
+}
+
+
+// =================================================================================
 // 플로팅 버튼 생성 (#send_form 기준 절대 위치)
 // =================================================================================
 function createToolbarButton() {
-    if ($('#qr-helper-toolbar-btn').length) return;
-
     const $sendForm = $('#send_form');
     if ($sendForm.css('position') === 'static') {
         $sendForm.css('position', 'relative');
     }
 
-    const $btn = $(`<div id="qr-helper-toolbar-btn" title="스크립트 도구"><i class="fa-solid fa-boxes-stacked"></i></div>`);
+    if ($('#qr-helper-toolbar-btn').length === 0) {
+        const $btn = $(`<div id="qr-helper-toolbar-btn" title="스크립트 도구" style="display: none;"><i class="fa-solid fa-boxes-stacked"></i></div>`);
+        $sendForm.append($btn);
+
+        $btn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openScriptPopup();
+        });
+    }
+
+    createQrHelperButton();
+
+    updateToolbarButtonVisibility();
+}
+
+function createQrHelperButton() {
+    const $sendForm = $('#send_form');
+    const btnId = 'qr-helper-extra-btn';
+
+    if (!settings.showQrHelper) {
+        $(`#${btnId}`).remove();
+        return;
+    }
+
+    if ($(`#${btnId}`).length) return; 
+
+    const $btn = $(`<div id="${btnId}" title="QR 도우미"><i class="fa-solid fa-wand-magic-sparkles"></i></div>`);
     $sendForm.append($btn);
 
     $btn.on('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        openScriptPopup();
+        openQrHelperPopup();
     });
 }
-
 // =================================================================================
 // 7. Context Menu 핸들러
 // =================================================================================
@@ -370,8 +607,12 @@ function handleCtxMenuClick(event) {
     if (!settings.height) settings.height = DEFAULT_SIZE.height;
     if (!settings.themeColor) settings.themeColor = DEFAULT_THEME_COLOR;
     if (typeof settings.lockSize === 'undefined') settings.lockSize = false; 
+    if (typeof settings.showQrHelper === 'undefined') settings.showQrHelper = true;
 
     applyThemeColor(settings.themeColor);
+    
+
+    injectStyles();
 
     createQrPopup();
     createToolbarButton(); 
@@ -391,6 +632,8 @@ function handleCtxMenuClick(event) {
             window.jQuery('#qr_popup_lock_size').on('change', onLockSizeChange);
             window.jQuery('#qr_popup_mobile_mode').on('change', onMobileModeChange);
 
+            window.jQuery('#qr_popup_show_helper').on('change', onShowHelperChange);
+
             loadSettingsUI();
             
         } catch (error) {
@@ -398,6 +641,7 @@ function handleCtxMenuClick(event) {
         }
     }
 })();
+
 
 // =================================================================================
 // 9. 설정 UI 기능
@@ -465,6 +709,13 @@ function loadSettingsUI() {
     window.jQuery('#qr_popup_theme_color').val(settings.themeColor);
     window.jQuery('#qr_popup_lock_size').prop('checked', settings.lockSize);
     window.jQuery('#qr_popup_mobile_mode').prop('checked', settings.mobileMode);
+    window.jQuery('#qr_popup_show_helper').prop('checked', settings.showQrHelper);
+}
+function onShowHelperChange() {
+    const isChecked = $(this).is(':checked');
+    settings.showQrHelper = isChecked;
+    saveSettingsDebounced();
+    createQrHelperButton();
 }
 
 function onSettingsInput() {

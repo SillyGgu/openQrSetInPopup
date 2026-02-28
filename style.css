@@ -344,3 +344,96 @@ body.qr-extension-active div[id^="script_container_"] {
 #qr-popup-content .qr--button:last-child {
     border-bottom: none !important;
 }
+
+#qr-helper-extra-btn {
+    position: absolute;
+    top: -22px;
+    left: 44px; 
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 13px;
+    cursor: pointer;
+    z-index: 200;
+    color: var(--smart-theme-body-color, #888);
+    background-color: var(--SmartThemeBlurTintColor, rgba(255,255,255,0.9));
+    border-radius: 4px 4px 0 0;
+    border: 1px solid var(--SmartThemeBlurTintColor, #ccc);
+    border-bottom: none;
+    opacity: 0.8;
+    transition: all 0.2s;
+}
+
+#qr-helper-extra-btn:hover {
+    opacity: 1;
+    color: var(--qr-theme-color, #64B5F6);
+    padding-bottom: 2px;
+}
+
+.qr-helper-section {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px dashed rgba(0,0,0,0.1);
+}
+.qr-helper-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.qr-helper-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--qr-theme-color);
+    opacity: 0.9;
+}
+
+.qr-helper-action-btn {
+    width: 100%;
+    padding: 10px;
+    background-color: var(--color-background, #fff);
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--smart-theme-body-color, #333);
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.qr-helper-action-btn:hover {
+    background-color: var(--qr-theme-color-soft, rgba(100, 181, 246, 0.1));
+    border-color: var(--qr-theme-color);
+    transform: translateY(-1px);
+}
+.qr-helper-action-btn i {
+    margin-right: 6px;
+    color: var(--qr-theme-color);
+}
+
+.qr-lang-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.qr-lang-btn {
+    padding: 8px;
+    background-color: var(--color-background, #fff);
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--smart-theme-body-color, #444);
+    transition: all 0.15s;
+    text-align: center;
+}
+.qr-lang-btn:hover {
+    background-color: var(--color-bg-alt, #f0f0f0);
+    border-color: rgba(0,0,0,0.2);
+}
+.qr-lang-btn.copied {
+    background-color: #4CAF50 !important;
+    color: white !important;
+    border-color: #4CAF50 !important;
+}
