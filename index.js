@@ -249,25 +249,41 @@ function setupDragAndResize($popup, $header) {
             isDragging = false;
             $popup.removeClass('grabbing').css('cursor', 'grab');
 
-            settings.width = $popup.width();
-            settings.height = $popup.height();
-            saveSettingsDebounced(); 
+            settings.width = Math.round($popup.outerWidth());
+            settings.height = Math.round($popup.outerHeight());
+            saveSettingsDebounced();
 
-            updatePopupContentHeight(); 
+            updatePopupContentHeight();
         }
     });
 
     if (window.ResizeObserver) {
-        const ro = new ResizeObserver(() => {
-            const newWidth = $popup.width();
-            const newHeight = $popup.height();
+        let isResizingByUser = false;
 
+        $popup[0].addEventListener('mousedown', function(e) {
+            // 팝업 우측/하단 resize 핸들 영역에서만 감지
+            const rect = $popup[0].getBoundingClientRect();
+            const onRightEdge = e.clientX >= rect.right - 16;
+            const onBottomEdge = e.clientY >= rect.bottom - 16;
+            if (onRightEdge || onBottomEdge) {
+                isResizingByUser = true;
+            }
+        });
+
+        $(window).on('mouseup.qr-resize', function() {
+            isResizingByUser = false;
+        });
+
+        const ro = new ResizeObserver(() => {
+            updatePopupContentHeight();
+            if (!isResizingByUser) return;
+            const newWidth = Math.round($popup.outerWidth());
+            const newHeight = Math.round($popup.outerHeight());
             if (settings.width !== newWidth || settings.height !== newHeight) {
                 settings.width = newWidth;
                 settings.height = newHeight;
-                saveSettingsDebounced(); 
+                saveSettingsDebounced();
             }
-            updatePopupContentHeight();
         });
         ro.observe($popup[0]);
     }
@@ -293,8 +309,8 @@ function openQrSetPopup(command) {
         $popup.css({
             top: settings.pos.top,
             left: settings.pos.left,
-            width: settings.width,
-            height: settings.height,
+            width: settings.width + 'px',
+            height: settings.height + 'px',
         });
     }
     $popup.show();
@@ -392,8 +408,8 @@ function openScriptPopup() {
         $popup.css({
             top: settings.pos.top,
             left: settings.pos.left,
-            width: settings.width,
-            height: settings.height,
+            width: settings.width + 'px',
+            height: settings.height + 'px',
         });
     }
     $popup.show();
@@ -452,8 +468,8 @@ function openQrHelperPopup() {
         $popup.css({
             top: settings.pos.top,
             left: settings.pos.left,
-            width: settings.width,
-            height: settings.height,
+            width: settings.width + 'px',
+            height: settings.height + 'px',
         });
     }
     $popup.show();
@@ -588,10 +604,9 @@ function handleCtxMenuClick(event) {
     const command = $item.attr('title');
 
     if (command && command.startsWith('/qr-set')) {
-        event.preventDefault();
         event.stopPropagation();
         $('.list-group.ctx-menu').remove();
-        openQrSetPopup(command);
+        setTimeout(() => openQrSetPopup(command), 0);
     }
 }
 
