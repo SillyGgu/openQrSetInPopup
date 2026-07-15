@@ -13,7 +13,11 @@ const DEFAULT_SETTINGS = {
     themeColor: DEFAULT_THEME_COLOR,
     lockSize: false,
     mobileMode: false,
-    showQrHelper: true 
+    showQrHelper: true,
+    helperReplacement: {
+        charName: '',
+        userName: '',
+    },
 };
 
 let settings;
@@ -626,6 +630,32 @@ function openScriptPopup() {
     updatePopupContentHeight();
 }
 
+function getHelperReplacementSettings() {
+    if (!settings.helperReplacement || typeof settings.helperReplacement !== 'object') {
+        settings.helperReplacement = {};
+    }
+
+    if (typeof settings.helperReplacement.charName !== 'string') {
+        settings.helperReplacement.charName = '';
+    }
+
+    if (typeof settings.helperReplacement.userName !== 'string') {
+        settings.helperReplacement.userName = '';
+    }
+
+    return settings.helperReplacement;
+}
+
+function replacePlaceholdersWithSavedNames(text) {
+    const replacements = getHelperReplacementSettings();
+    const charName = replacements.charName.trim();
+    const userName = replacements.userName.trim();
+
+    return text
+        .replaceAll('{{char}}', charName || '{{char}}')
+        .replaceAll('{{user}}', userName || '{{user}}');
+}
+
 // =================================================================================
 // 6.5. QR 도우미 팝업
 // =================================================================================
@@ -690,6 +720,53 @@ function openQrHelperPopup() {
     });
     $swapSection.append($swapBtn);
     $popupContent.append($swapSection);
+
+    const savedReplacements = getHelperReplacementSettings();
+    const $nameReplaceSection = $('<div class="qr-helper-section">');
+    $nameReplaceSection.append('<div class="qr-helper-label">플레이스홀더 이름 치환</div>');
+
+    const $nameReplaceInputs = $('<div class="qr-helper-name-grid"></div>');
+    const $charField = $('<label class="qr-helper-name-field"><span>{{char}}</span><input type="text" class="text_pole" data-qr-helper-name="charName" placeholder="{{char}} 유지"></label>');
+    const $userField = $('<label class="qr-helper-name-field"><span>{{user}}</span><input type="text" class="text_pole" data-qr-helper-name="userName" placeholder="{{user}} 유지"></label>');
+    const $charInput = $charField.find('input').val(savedReplacements.charName);
+    const $userInput = $userField.find('input').val(savedReplacements.userName);
+
+    $nameReplaceInputs.append($charField, $userField);
+
+    $nameReplaceInputs.on('input', 'input[data-qr-helper-name]', function() {
+        const key = $(this).attr('data-qr-helper-name');
+        getHelperReplacementSettings()[key] = $(this).val();
+        saveSettingsDebounced();
+    });
+
+    const $nameReplaceBtn = $('<button class="qr-helper-action-btn"><i class="fa-solid fa-pen-to-square"></i> 입력창의 {{char}} / {{user}} 치환</button>');
+    $nameReplaceBtn.on('click', function() {
+        const $textarea = $('#send_textarea');
+        const text = $textarea.val();
+
+        if (!text) {
+            if (window.toastr) window.toastr.warning('입력창이 비어있습니다.');
+            return;
+        }
+
+        if (!text.includes('{{char}}') && !text.includes('{{user}}')) {
+            if (window.toastr) window.toastr.info('치환할 태그({{char}}, {{user}})가 없습니다.');
+            return;
+        }
+
+        savedReplacements.charName = $charInput.val();
+        savedReplacements.userName = $userInput.val();
+        saveSettingsDebounced();
+
+        const replacedText = replacePlaceholdersWithSavedNames(text);
+        $textarea.val(replacedText);
+        $textarea.trigger('input');
+
+        if (window.toastr) window.toastr.success('이름 치환 완료!');
+    });
+
+    $nameReplaceSection.append($nameReplaceInputs, $nameReplaceBtn);
+    $popupContent.append($nameReplaceSection);
 
     const $langSection = $('<div class="qr-helper-section">');
     $langSection.append('<div class="qr-helper-label">언어 지정 프롬프트 복사</div>');
@@ -802,6 +879,7 @@ function handleCtxMenuClick(event) {
 	if (typeof settings.lockSize === 'undefined') settings.lockSize = false;
 	if (typeof settings.mobileMode === 'undefined') settings.mobileMode = false;
 	if (typeof settings.showQrHelper === 'undefined') settings.showQrHelper = true;
+    getHelperReplacementSettings();
 
     applyThemeColor(settings.themeColor);
     
