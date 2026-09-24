@@ -1,75 +1,43 @@
-import { saveSettingsDebounced, eventSource, event_types } from '../../../../script.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { extension_settings } from '../../../extensions.js';
+import { getPopupGroups, getQrSetReference, resolveContextMessage } from './context-menu.mjs';
 
 const extensionName = 'openQrSetInPopup';
 const DEFAULT_POS = { top: 100, left: 100 };
 const DEFAULT_SIZE = { width: 400, height: 250 };
 const DEFAULT_THEME_COLOR = '#64B5F6'; 
 
-const DEFAULT_SETTINGS = {
-    pos: DEFAULT_POS,
-    width: DEFAULT_SIZE.width,
-    height: DEFAULT_SIZE.height,
-    themeColor: DEFAULT_THEME_COLOR,
-    lockSize: false,
-    mobileMode: false,
-    showQrHelper: true,
-    helperReplacement: {
-        charName: '',
-        userName: '',
-    },
-};
-
 let settings;
-let scriptObserver = null;
+let popupRequestId = 0;
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`; 
-
-// =================================================================================
-// 0. 스타일 주입 (복사 버튼용 CSS)
-// =================================================================================
-function injectStyles() {
-    const styleId = 'qr-popup-extra-styles';
-    if ($(`#${styleId}`).length) return;
-
-    const css = `
-        .popup-qr-button {
-            position: relative;
-            display: flex;
-            align-items: center;
-            /* 기존 스타일과의 호환성을 위해 flex 사용 */
-        }
-        .qr-copy-btn {
-            margin-left: auto; /* 우측 끝으로 밀기 */
-            padding: 5px 10px;
-            cursor: pointer;
-            opacity: 0.6;
-            transition: opacity 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-left: 1px solid rgba(255,255,255,0.1);
-        }
-        .qr-copy-btn:hover {
-            opacity: 1;
-            background-color: rgba(255,255,255,0.1);
-        }
-        .qr-copy-btn i {
-            pointer-events: none;
-        }
-    `;
-    $('head').append(`<style id="${styleId}">${css}</style>`);
-}
 
 // =================================================================================
 // 1. QR API 준비 대기
 // =================================================================================
-function onQrApiReady(callback) {
-    const interval = setInterval(() => {
-        if (window.parent.quickReplyApi) {
-            clearInterval(interval);
-            callback(window.parent.quickReplyApi);
-        }
-    }, 100);
+async function getQrApi() {
+    if (globalThis.quickReplyApi) return globalThis.quickReplyApi;
+    for (let attempt = 0; attempt < 50; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (globalThis.quickReplyApi) return globalThis.quickReplyApi;
+    }
+    throw new Error('Quick Reply API를 사용할 수 없습니다. Quick Replies가 활성화되어 있는지 확인하세요.');
+}
+
+async function copyToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.append(input);
+    input.select();
+    try {
+        if (!document.execCommand('copy')) throw new Error('Clipboard copy was denied');
+    } finally {
+        input.remove();
+    }
 }
 
 // =================================================================================
@@ -80,188 +48,231 @@ function restoreScriptButtons() {
 
     $popupContent.find('.qr-inline-submenu').remove();
 
-    $popupContent.find('[data-origin-type="script"]').each(function() {
+    $popupContent.find('[data-origin-type="script"][data-origin-id]').each(function() {
         const $btn = $(this);
+        $btn.children('.qr-popup-context-toggle').remove();
+        $btn.children('.qr-script-location-toggle').remove();
+        $btn.removeClass('qr-popup-managed');
         const originId = $btn.attr('data-origin-id');
-        const $originContainer = $(`#${originId}`);
+        const $originContainer = $(document.getElementById(originId));
         if ($originContainer.length) {
             $originContainer.append($btn);
         }
         $btn.removeAttr('data-origin-id').removeAttr('data-origin-type');
     });
 
-    $popupContent.find('[data-origin-type="chatqr"]').each(function() {
-        $(this).find('.qr--button-expander').off('click.qrpopup');
+}
+
+function scriptButtonKey(button, containerId, index, api, qrByDom) {
+    const $button = $(button);
+    const existing = $button.attr('data-qr-popup-key');
+    if (existing) return existing;
+    const qr = qrByDom.get(button);
+    const set = qr && api.getSetByQr?.(qr);
+    const key = set && qr?.id != null
+        ? `qr:${set.name}:${qr.id}`
+        : `button:${containerId}:${index}:${$button.find('.qr--button-label').text().trim()}`;
+    $button.attr('data-qr-popup-key', key);
+    return key;
+}
+
+function getScriptButtonLabel(button, qr) {
+    const $button = $(button);
+    return [
+        qr?.label,
+        $button.find('.qr--button-label').text(),
+        $button.text(),
+        $button.attr('aria-label'),
+        $button.attr('title'),
+        $button.attr('id'),
+    ].find(value => typeof value === 'string' && value.trim())?.trim() || '이름 없는 버튼';
+}
+
+function isOriginalScriptButton(button) {
+    return !!settings.originalScriptButtons?.[$(button).attr('data-qr-popup-key')];
+}
+
+function setOriginalScriptButton(key, enabled) {
+    if (enabled) settings.originalScriptButtons[key] = true;
+    else delete settings.originalScriptButtons[key];
+    syncScriptButtonLocations();
+    if ($('#qr-popup-container').is(':visible') && $('#qr-popup-header-title').text() === '스크립트 도구') {
+        openScriptPopup(true);
+    }
+    updateToolbarButtonVisibility();
+    refreshScriptButtonSettings();
+    saveSettingsDebounced();
+}
+
+function addScriptLocationToggle($row, sourceButton) {
+    const key = $(sourceButton).attr('data-qr-popup-key');
+    if (!key) return;
+    const $toggle = $('<button type="button" class="qr-toggle-switch qr-script-location-toggle" role="switch" aria-label="원래 위치에 표시" title="원래 위치에 표시"><span class="qr-toggle-slider"></span></button>')
+        .attr('aria-checked', String(isOriginalScriptButton(sourceButton)));
+    $toggle.on('click', event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setOriginalScriptButton(key, $toggle.attr('aria-checked') !== 'true');
     });
+    $row.append($toggle);
+}
+
+function syncScriptButtonLocations() {
+    const api = globalThis.quickReplyApi;
+    let qrByDom = new WeakMap();
+    try {
+        if (api) qrByDom = indexQrButtons(api);
+    } catch (error) {
+        console.warn(`[${extensionName}] QR 버튼 위치 정보를 불러오지 못했습니다.`, error);
+    }
+    getSecondaryQrGroups().each(function(groupIndex) {
+        const $group = $(this);
+        $group.find('.qr--button').each(function(index) {
+            scriptButtonKey(this, this.closest('[id^="script_container_"]')?.id || `secondary-${groupIndex}`, index, api, qrByDom);
+            $(this).toggleClass('qr-popup-original', isOriginalScriptButton(this));
+        });
+        $group.toggleClass('qr-popup-original-group', $group.find('.qr--button.qr-popup-original').length > 0);
+    });
+    $('div[id^="script_container_"]').each(function() {
+        const $container = $(this);
+        $container.find('.qr--button').each(function(index) {
+            scriptButtonKey(this, $container.attr('id'), index, api, qrByDom);
+            $(this).toggleClass('qr-popup-original', isOriginalScriptButton(this));
+        });
+        $container.toggleClass('qr-popup-original-group', $container.find('.qr--button.qr-popup-original').length > 0);
+    });
+}
+
+function refreshScriptButtonSettings() {
+    const $list = $('#qr_popup_original_buttons');
+    if (!$list.length) return;
+    const buttons = new Set([
+        ...getSecondaryQrGroups().find('.qr--button').toArray(),
+        ...$('div[id^="script_container_"] .qr--button').toArray(),
+    ]);
+    $list.empty();
+    let shown = 0;
+    const seenKeys = new Set();
+    for (const button of buttons) {
+        const key = $(button).attr('data-qr-popup-key');
+        if (!key || seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        shown++;
+        const label = getScriptButtonLabel(button);
+        const $row = $('<label class="qr-script-location-row"></label>');
+        const $input = $('<input type="checkbox">').val(key).prop('checked', isOriginalScriptButton(button));
+        $row.append($('<span></span>').text(label), $('<span class="qr-toggle-switch"></span>').append($input, '<span class="qr-toggle-slider"></span>'));
+        $list.append($row);
+    }
+    if (!shown) $list.append('<small>표시할 스크립트 도구 버튼이 없습니다.</small>');
 }
 
 function updateToolbarButtonVisibility() {
     const $btn = $('#qr-helper-toolbar-btn');
 
     const buttonsInContainers = $('div[id^="script_container_"] .qr--button').length;
-    const chatQrButtonsInPopup = $('#qr-popup-content [data-origin-type="chatqr"]').length;
-    const scriptButtonsInPopup = $('#qr-popup-content [data-origin-type="script"]').length;
+    const chatQrButtonsInBar = getSecondaryQrGroups().find('.qr--button').length;
 
-    if (buttonsInContainers + chatQrButtonsInPopup + scriptButtonsInPopup > 0) {
+    if (buttonsInContainers + chatQrButtonsInBar > 0) {
         $btn.show();
     } else {
         $btn.hide();
     }
 }
-function renderChatQrButtons() {
-    const $popupContent = $('#qr-popup-content');
-
-    $popupContent.find('[data-origin-type="chatqr"]').remove();
-    $popupContent.find('.qr-inline-submenu').remove();
-
-    $('#qr--bar').children('.qr--buttons').each(function(index) {
-        if (index === 0) return; 
-        const $group = $(this);
-        if ($group.attr('id') && $group.attr('id').startsWith('script_container_')) return;
-        $group.hide();
-    });
-
-    const api = window.quickReplyApi;
-    if (!api) return;
-
-    const chatQrGroups = [];
-    $('#qr--bar').children('.qr--buttons').each(function(index) {
-        if (index === 0) return;
-        const $group = $(this);
-        if ($group.attr('id') && $group.attr('id').startsWith('script_container_')) return;
-        chatQrGroups.push($group);
-    });
-
-    if (chatQrGroups.length === 0) {
-        updateToolbarButtonVisibility();
-        return;
-    }
-
-    chatQrGroups.forEach($group => {
-        $group.find('.qr--button').each(function() {
-            const $origBtn = $(this);
-            const label = $origBtn.find('.qr--button-label').text().trim();
-            const hasCtx = $origBtn.hasClass('qr--hasCtx');
-            const iconClass = $origBtn.find('.qr--button-icon').attr('class') || '';
-
-            // 새 버튼 생성 (원본 DOM 이동 아닌 새로 그리기)
-            const $btn = $('<div class="popup-qr-button" data-origin-type="chatqr"></div>');
-
-            const $icon = $(`<div class="${iconClass}"></div>`);
-            const $label = $('<div class="qr--button-label"></div>').text(label);
-            $btn.append($icon, $label);
-
-            // context menu 있는 버튼에만 ⋮ 표시
-            if (hasCtx) {
-                const $expander = $('<div class="qr--button-expander" title="메뉴 열기">⋮</div>');
-                $btn.append($expander);
-
-                $expander.on('click', function(e) {
-                    e.stopPropagation();
-                    e.preventDefault();
-
-                    // 이미 열려 있으면 접기
-                    const $existing = $btn.next('.qr-inline-submenu');
-                    if ($existing.length > 0) {
-                        $existing.remove();
-                        return;
-                    }
-
-                    // 다른 서브메뉴 닫기
-                    $popupContent.find('.qr-inline-submenu').remove();
-
-                    // 원본 버튼의 expander를 클릭해 ST의 ctx-menu 생성
-                    // 단, 생성된 즉시 가로채서 인라인으로 전환
-                    const origExpander = $origBtn.find('.qr--button-expander')[0];
-                    if (!origExpander) return;
-
-                    // ST ctx-menu 생성 유도 (원본 expander 클릭)
-                    origExpander.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-                    setTimeout(() => {
-                        const $ctxMenu = $('.list-group.ctx-menu');
-                        if ($ctxMenu.length === 0) return;
-
-                        // ctx-menu를 즉시 제거하고 인라인 서브메뉴로 재구성
-                        const $subMenu = $('<div class="qr-inline-submenu"></div>');
-
-                        $ctxMenu.find('.ctx-item').each(function() {
-                            const $item = $(this);
-                            const itemTitle = $item.attr('title') || '';
-                            const $subBtn = $('<div class="popup-qr-button qr-submenu-item"></div>');
-                            // ctx-item 내부 HTML 그대로 복사 (아이콘+텍스트)
-                            $subBtn.html($item.html());
-                            $subBtn.attr('title', itemTitle);
-                            $subBtn.on('click', function(ev) {
-                                ev.stopPropagation();
-                                $subMenu.remove();
-                                // 원본 ctx-item 동작 실행
-                                $item[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                            });
-                            $subMenu.append($subBtn);
-                        });
-
-                        $ctxMenu.remove();
-                        $btn.after($subMenu);
-                    }, 30);
-                });
-            }
-
-            // 버튼 본체 클릭 → 원본 버튼 클릭 위임
-            $btn.on('click', function(e) {
-                if ($(e.target).hasClass('qr--button-expander')) return;
-                $origBtn[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            });
-
-            $popupContent.append($btn);
-        });
-    });
-
-    updateToolbarButtonVisibility();
-}
-
 function initScriptObserver() {
     $('body').addClass('qr-extension-active');
-
-    renderChatQrButtons();
-
-    eventSource.on(event_types.CHAT_CHANGED, () => {
-        // CSS가 이미 숨겨주므로 딜레이 없이 바로 실행
-        // 단 ST가 QR bar DOM을 업데이트할 시간 최소한만 확보
-        setTimeout(() => renderChatQrButtons(), 50);
-    });
-
-    // script_container_ 감시는 유지 (send_form 기준)
-    const targetNode = document.getElementById('send_form');
-    if (!targetNode) return;
-
-    const config = { childList: true, subtree: true };
-    const callback = function(mutationsList) {
-        for (const mutation of mutationsList) {
-            if (mutation.type === 'childList') {
-                mutation.addedNodes.forEach(node => {
-                    if (node.nodeType !== 1) return;
-                    if (node.id && node.id.startsWith('script_container_')) {
-                        $(node).addClass('script-container-managed');
-                        updateToolbarButtonVisibility();
-                    }
-                });
-                mutation.removedNodes.forEach(node => {
-                    if (node.nodeType !== 1) return;
-                    if (node.id && node.id.startsWith('script_container_')) {
-                        updateToolbarButtonVisibility();
-                    }
-                });
-            }
-        }
-    };
-
-    scriptObserver = new MutationObserver(callback);
-    scriptObserver.observe(targetNode, config);
-
+    syncScriptButtonLocations();
     updateToolbarButtonVisibility();
+
+    const sendForm = document.getElementById('send_form');
+    if (!sendForm) return;
+
+    let updateQueued = false;
+    const observer = new MutationObserver(mutations => {
+        const relevant = mutations.some(({ addedNodes, removedNodes }) =>
+            [...addedNodes, ...removedNodes].some(node => node.nodeType === 1 &&
+                (node.matches('.qr--button, .qr--buttons, [id^="script_container_"]') ||
+                 node.querySelector('.qr--button, .qr--buttons, [id^="script_container_"]'))));
+        if (!relevant || updateQueued) return;
+        updateQueued = true;
+        queueMicrotask(() => {
+            updateQueued = false;
+            syncScriptButtonLocations();
+            updateToolbarButtonVisibility();
+            refreshScriptButtonSettings();
+        });
+    });
+    observer.observe(sendForm, { childList: true, subtree: true });
 }
 
+function getSecondaryQrGroups() {
+    const $holder = $('#qr--bar').length ? $('#qr--bar') : $('#qr--popout .qr--body');
+    const $directGroups = $holder.children('.qr--buttons');
+    const $groups = $directGroups.length === 1 && $directGroups.first().children('.qr--buttons').length
+        ? $directGroups.first().children('.qr--buttons')
+        : $directGroups;
+    return $groups.slice(1).filter(function() {
+        return !this.id?.startsWith('script_container_');
+    });
+}
+
+function reportQrError(error) {
+    console.error(`[${extensionName}] QR 실행 실패:`, error);
+    window.toastr?.error('QR 실행에 실패했습니다.');
+}
+
+function addContextToggle($row, state) {
+    if (getPopupGroups(state.qr, state.api, state.message, state.hierarchy, state.parentLabels).length === 0) return;
+
+    const $toggle = $('<button type="button" class="qr-popup-context-toggle" aria-expanded="false" aria-label="하위 QR 펼치기">▾</button>');
+    $toggle.on('click', function(event) {
+        event.stopPropagation();
+        event.preventDefault();
+
+        const $existing = $row.next('.qr-inline-submenu');
+        if ($existing.length) {
+            $existing.remove();
+            $toggle.attr({ 'aria-expanded': 'false', 'aria-label': '하위 QR 펼치기' });
+            return;
+        }
+
+        const $submenu = $('<div class="qr-inline-submenu" role="group"></div>');
+        for (const group of getPopupGroups(state.qr, state.api, state.message, state.hierarchy, state.parentLabels)) {
+            $submenu.append($('<div class="qr-context-set-name"></div>').text(group.name));
+            for (const entry of group.children) {
+                const $child = $('<div class="popup-qr-button qr-submenu-item"></div>')
+                    .attr('title', entry.qr.title || entry.qr.message || entry.qr.label);
+                const $icon = $('<div class="qr--button-icon fa-solid"></div>').addClass(entry.qr.icon || 'qr--hidden');
+                $child.append($icon, $('<div class="qr--button-label"></div>').text(entry.qr.label));
+                $child.on('click', event => {
+                    event.stopPropagation();
+                    if (getQrSetReference(entry.qr, state.api) && $child.children('.qr-popup-context-toggle').length) {
+                        $child.children('.qr-popup-context-toggle').trigger('click');
+                        return;
+                    }
+                    Promise.resolve()
+                        .then(() => entry.set.execute(entry.qr, resolveContextMessage(entry)))
+                        .catch(reportQrError);
+                });
+                addContextToggle($child, { ...entry, api: state.api });
+                $submenu.append($child);
+            }
+        }
+        $row.after($submenu);
+        $toggle.attr({ 'aria-expanded': 'true', 'aria-label': '하위 QR 접기' });
+    });
+    $row.append($toggle);
+}
+
+function indexQrButtons(api) {
+    const byDom = new WeakMap();
+    for (const name of api.listSets?.() ?? []) {
+        for (const qr of api.getSetByName(name)?.qrList ?? []) {
+            if (qr.dom) byDom.set(qr.dom, qr);
+        }
+    }
+    return byDom;
+}
 // =================================================================================
 // 3. 팝업 UI 생성
 // =================================================================================
@@ -297,6 +308,7 @@ function createQrPopup() {
     $closeBtn.on('click', function(e) {
         e.stopPropagation();
         e.preventDefault();
+        popupRequestId++;
         $('#qr-popup-content').find('.qr-inline-submenu').remove();
         $('.list-group.ctx-menu').remove();
         restoreScriptButtons();
@@ -310,34 +322,37 @@ function createQrPopup() {
 // =================================================================================
 // 4. 리사이즈 및 드래그
 // =================================================================================
-function updatePopupContentHeight() {
-    const $popup = $('#qr-popup-container');
-    const $header = $('#qr-popup-header');
-    const $content = $('#qr-popup-content');
-
-    if (!$popup.is(':visible')) return;
-
-    const popupHeight = $popup.height();
-    const headerHeight = $header.outerHeight(true);
-    const available = popupHeight - headerHeight;
-
-    $content.css({
-        maxHeight: available + 'px',
-        overflowY: 'auto'
+function applyPopupLayout($popup) {
+    if (settings.mobileMode) {
+        $popup.addClass('mobile-layout').css({ top: '', left: '', width: '', height: '' });
+        return;
+    }
+    const width = Math.min(settings.width, window.innerWidth);
+    const height = Math.min(settings.height, window.innerHeight);
+    $popup.removeClass('mobile-layout').css({
+        top: Math.max(0, Math.min(settings.pos.top, window.innerHeight - height)),
+        left: Math.max(0, Math.min(settings.pos.left, window.innerWidth - width)),
+        width,
+        height,
     });
 }
 
 function setupDragAndResize($popup, $header) {
     let isDragging = false;
     let offsetX, offsetY;
+    let maxX, maxY;
     const $window = $(window);
 
     $header.on('mousedown', function(e) {
         if ($(e.target).closest('#qr-popup-close-btn').length) return;
+        if (settings.mobileMode) return;
 
         isDragging = true;
-        offsetX = e.clientX - $popup.offset().left;
-        offsetY = e.clientY - $popup.offset().top;
+        const rect = $popup[0].getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        maxX = Math.max(0, window.innerWidth - rect.width);
+        maxY = Math.max(0, window.innerHeight - rect.height);
         $popup.addClass('grabbing').css('cursor', 'grabbing');
         e.preventDefault();
     });
@@ -347,19 +362,13 @@ function setupDragAndResize($popup, $header) {
         let newX = e.clientX - offsetX;
         let newY = e.clientY - offsetY;
 
-        const minX = 0;
-        const minY = 0;
-        const maxX = $window.width() - $popup.outerWidth();
-        const maxY = $window.height() - $popup.outerHeight();
+        newX = Math.max(0, Math.min(newX, maxX));
+        newY = Math.max(0, Math.min(newY, maxY));
 
-        newX = Math.max(minX, Math.min(newX, maxX));
-        newY = Math.max(minY, Math.min(newY, maxY));
-
-        $popup.offset({ top: newY, left: newX });
+        $popup.css({ top: newY, left: newX });
 
         settings.pos.top = newY;
         settings.pos.left = newX;
-        saveSettingsDebounced();
     });
 
     $window.on('mouseup', function() {
@@ -367,92 +376,68 @@ function setupDragAndResize($popup, $header) {
             isDragging = false;
             $popup.removeClass('grabbing').css('cursor', 'grab');
 
-            settings.width = Math.round($popup.outerWidth());
-            settings.height = Math.round($popup.outerHeight());
             saveSettingsDebounced();
-
-            updatePopupContentHeight();
         }
     });
 
-    if (window.ResizeObserver) {
-        let isResizingByUser = false;
-
-        $popup[0].addEventListener('mousedown', function(e) {
-            const rect = $popup[0].getBoundingClientRect();
-            const onRightEdge = e.clientX >= rect.right - 16;
-            const onBottomEdge = e.clientY >= rect.bottom - 16;
-            if (onRightEdge || onBottomEdge) {
-                isResizingByUser = true;
-            }
-        });
-
-        $(window).on('mouseup.qr-resize', function() {
-            isResizingByUser = false;
-        });
-
-        const ro = new ResizeObserver(() => {
-            updatePopupContentHeight();
-            if (!isResizingByUser) return;
-            const newWidth = Math.round($popup.outerWidth());
-            const newHeight = Math.round($popup.outerHeight());
-            if (settings.width !== newWidth || settings.height !== newHeight) {
-                settings.width = newWidth;
-                settings.height = newHeight;
-                saveSettingsDebounced();
-            }
-        });
-        ro.observe($popup[0]);
-    }
-
-    $(window).on('resize', updatePopupContentHeight);
+    let isResizingByUser = false;
+    $popup[0].addEventListener('mousedown', function(e) {
+        if (settings.lockSize || settings.mobileMode) return;
+        const rect = $popup[0].getBoundingClientRect();
+        isResizingByUser = e.clientX >= rect.right - 16 || e.clientY >= rect.bottom - 16;
+    });
+    $window.on('mouseup.qr-resize', function() {
+        if (isResizingByUser) {
+            settings.width = Math.round($popup.outerWidth());
+            settings.height = Math.round($popup.outerHeight());
+            saveSettingsDebounced();
+        }
+        isResizingByUser = false;
+    });
+    $window.on('resize', () => {
+        if ($popup.is(':visible') && !settings.mobileMode) applyPopupLayout($popup);
+    });
 }
 
 // =================================================================================
 // 5. 일반 QR 세트 팝업 (복사 기능 추가)
 // =================================================================================
-function openQrSetPopup(command) {
+async function openQrSetPopup(command) {
+    const requestId = ++popupRequestId;
     restoreScriptButtons(); 
 
     const setName = command.substring('/qr-set '.length).trim();
     const $popup = $('#qr-popup-container');
     const $popupContent = $('#qr-popup-content');
 
-    if (settings.mobileMode) {
-        $popup.addClass('mobile-layout');
-        $popup.css({ top: '', left: '', width: '', height: '' });
-    } else {
-        $popup.removeClass('mobile-layout');
-        $popup.css({
-            top: settings.pos.top,
-            left: settings.pos.left,
-            width: settings.width + 'px',
-            height: settings.height + 'px',
-        });
-    }
-    $popup.show();
+    applyPopupLayout($popup);
+    $popup.css('display', 'flex');
 
     $('#qr-popup-header-title').text(setName);
     $popupContent.empty();
     $popupContent.prepend($('<p class="qr-placeholder">QR 세트 로딩 중...</p>'));
 
-    updatePopupContentHeight(); 
 
-    onQrApiReady((api) => {
-        try {
+    try {
+            const api = await getQrApi();
+            if (requestId !== popupRequestId) return;
             const qrSet = api.getSetByName(setName);
-            if (!qrSet || !qrSet.qrList || qrSet.qrList.length === 0) {
+            const visibleQrs = qrSet?.qrList?.filter(qr => !qr.isHidden) || [];
+            if (visibleQrs.length === 0) {
                 $popupContent.empty();
                 $popupContent.prepend($('<p class="qr-placeholder">이 QR 세트 폴더는 비어 있거나 찾을 수 없습니다.</p>'));
                 return;
             }
 
             $popupContent.empty();
-            qrSet.qrList.forEach(qr => {
+            const buttons = document.createDocumentFragment();
+            visibleQrs.forEach(qr => {
                 const $button = $('<div class="popup-qr-button">');
-                $button.attr('title', qr.command || qr.label);
+                $button.attr('title', qr.title || qr.message || qr.label);
+                const folderSet = getQrSetReference(qr, api);
                 
-                const $icon = $(`<div class="qr--button-icon fa-solid ${qr.icon || 'qr--hidden'}"></div>`);
+                const $icon = $('<div class="qr--button-icon fa-solid"></div>');
+                $icon.addClass(qr.icon || 'qr--hidden');
                 const $label = $(`<div class="qr--button-label"></div>`).text(qr.label);
                 
                 const $copyBtn = $('<div class="qr-copy-btn" title="내용 복사"><i class="fa-solid fa-copy"></i></div>');
@@ -464,7 +449,7 @@ function openQrSetPopup(command) {
                     const contentToCopy = qr.message; 
                     
                     if (contentToCopy) {
-                        navigator.clipboard.writeText(contentToCopy).then(() => {
+                        copyToClipboard(contentToCopy).then(() => {
                             if (window.toastr) {
                                 window.toastr.success('클립보드에 복사되었습니다.', 'QR 복사 완료');
                             } else {
@@ -485,151 +470,108 @@ function openQrSetPopup(command) {
                     }
                 });
 
-                $button.append($icon, $label, $copyBtn);
+                $button.append($icon, $label);
+                if (!folderSet) $button.append($copyBtn);
+                addContextToggle($button, { qr, api, message: qr.message ?? '', hierarchy: [], parentLabels: [] });
 
                 $button.on('click', function(e) {
                     e.stopPropagation();
                     e.preventDefault();
-                    api.executeQuickReply(qrSet.name, qr.label);
+                    if (folderSet && $button.children('.qr-popup-context-toggle').length) {
+                        $button.children('.qr-popup-context-toggle').trigger('click');
+                        return;
+                    }
+                    api.executeQuickReply(qrSet.name, Number.isInteger(qr.id) ? qr.id : qr.label)
+                        .catch(error => {
+                            console.error(`[${extensionName}] QR 실행 실패:`, error);
+                            window.toastr?.error('QR 실행에 실패했습니다.');
+                        });
                 });
                 
-                $popupContent.append($button);
+                buttons.append($button[0]);
             });
-            updatePopupContentHeight(); 
-        } catch (error) {
+            $popupContent.append(buttons);
+    } catch (error) {
+            if (requestId !== popupRequestId) return;
             console.error(`[${extensionName}] QR 세트 로드 중 오류:`, error);
-            $popupContent.children(':not([data-origin-type="chatqr"])').remove();
+            $popupContent.empty();
             $popupContent.prepend($('<p class="qr-error">QR 세트 로드 중 오류 발생. 콘솔 확인.</p>'));
-        }
-    });
+    }
 }
 
 // =================================================================================
 // 6. 스크립트 도구 팝업 (토글 기능)
 // =================================================================================
-function openScriptPopup() {
+function createScriptPopupRow(button, originType, qrByDom, api) {
+    const $original = $(button);
+    const qr = qrByDom.get(button);
+    const $row = $('<div class="popup-qr-button"></div>').attr('data-origin-type', originType);
+    const iconClass = $original.find('.qr--button-icon').attr('class') || '';
+    $row.append(
+        $('<div></div>').addClass(iconClass),
+        $('<div class="qr--button-label"></div>').text(getScriptButtonLabel(button, qr)),
+    );
+    if (qr) {
+        addContextToggle($row, { qr, api, message: qr.message ?? '', hierarchy: [], parentLabels: [] });
+    } else if ($original.hasClass('qr--hasCtx')) {
+        const $fallback = $('<button type="button" class="qr-popup-context-toggle" aria-label="기본 메뉴 열기">⋮</button>');
+        $fallback.on('click', event => {
+            event.stopPropagation();
+            $original.find('.qr--button-expander')[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        $row.append($fallback);
+    }
+    addScriptLocationToggle($row, button);
+    $row.on('click', event => {
+        event.stopPropagation();
+        if (qr && getQrSetReference(qr, api) && $row.children('.qr-popup-context-toggle').length) {
+            $row.children('.qr-popup-context-toggle').trigger('click');
+            return;
+        }
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    return $row;
+}
+
+function openScriptPopup(refresh = false) {
+    popupRequestId++;
     const $popup = $('#qr-popup-container');
     const $headerTitle = $('#qr-popup-header-title');
-
-    if ($popup.is(':visible') && $headerTitle.text() === "스크립트 도구") {
+    if (!refresh && $popup.is(':visible') && $headerTitle.text() === '스크립트 도구') {
         $('#qr-popup-close-btn').click();
         return;
     }
 
     restoreScriptButtons();
-
+    syncScriptButtonLocations();
     const $popupContent = $('#qr-popup-content');
-
-    if (settings.mobileMode) {
-        $popup.addClass('mobile-layout');
-        $popup.css({ top: '', left: '', width: '', height: '' });
-    } else {
-        $popup.removeClass('mobile-layout');
-        $popup.css({
-            top: settings.pos.top,
-            left: settings.pos.left,
-            width: settings.width + 'px',
-            height: settings.height + 'px',
-        });
-    }
-    $popup.show();
-
-    $headerTitle.text("스크립트 도구");
-
+    applyPopupLayout($popup);
+    $popup.css('display', 'flex');
+    $headerTitle.text('스크립트 도구');
     $popupContent.empty();
+    const api = globalThis.quickReplyApi;
+    let qrByDom = new WeakMap();
+    try {
+        if (api) qrByDom = indexQrButtons(api);
+    } catch (error) {
+        console.warn(`[${extensionName}] QR 데이터를 불러오지 못해 기본 메뉴를 사용합니다.`, error);
+    }
 
-    const chatQrGroups = [];
-    $('#qr--bar').children('.qr--buttons').each(function(index) {
-        if (index === 0) return;
-        const $group = $(this);
-        if ($group.attr('id') && $group.attr('id').startsWith('script_container_')) return;
-        chatQrGroups.push($group);
-    });
-
-    chatQrGroups.forEach($group => {
-        $group.find('.qr--button').each(function() {
-            const $origBtn = $(this);
-            const label = $origBtn.find('.qr--button-label').text().trim();
-            const hasCtx = $origBtn.hasClass('qr--hasCtx');
-            const iconClass = $origBtn.find('.qr--button-icon').attr('class') || '';
-
-            const $btn = $('<div class="popup-qr-button" data-origin-type="chatqr"></div>');
-            const $icon = $(`<div class="${iconClass}"></div>`);
-            const $label = $('<div class="qr--button-label"></div>').text(label);
-            $btn.append($icon, $label);
-
-            if (hasCtx) {
-                const $expander = $('<div class="qr--button-expander" title="메뉴 열기">⋮</div>');
-                $btn.append($expander);
-
-                $expander.on('click', function(e) {
-                    e.stopPropagation();
-                    e.preventDefault();
-
-                    const $existing = $btn.next('.qr-inline-submenu');
-                    if ($existing.length > 0) {
-                        $existing.remove();
-                        return;
-                    }
-
-                    $popupContent.find('.qr-inline-submenu').remove();
-
-                    const origExpander = $origBtn.find('.qr--button-expander')[0];
-                    if (!origExpander) return;
-
-                    origExpander.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-                    setTimeout(() => {
-                        const $ctxMenu = $('.list-group.ctx-menu');
-                        if ($ctxMenu.length === 0) return;
-
-                        const $subMenu = $('<div class="qr-inline-submenu"></div>');
-
-                        $ctxMenu.find('.ctx-item').each(function() {
-                            const $item = $(this);
-                            const itemTitle = $item.attr('title') || '';
-                            const $subBtn = $('<div class="popup-qr-button qr-submenu-item"></div>');
-                            $subBtn.html($item.html());
-                            $subBtn.attr('title', itemTitle);
-                            $subBtn.on('click', function(ev) {
-                                ev.stopPropagation();
-                                $subMenu.remove();
-                                $item[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                            });
-                            $subMenu.append($subBtn);
-                        });
-
-                        $ctxMenu.remove();
-                        $btn.after($subMenu);
-                    }, 30);
-                });
-            }
-
-            $btn.on('click', function(e) {
-                if ($(e.target).hasClass('qr--button-expander')) return;
-                $origBtn[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            });
-
-            $popupContent.append($btn);
+    getSecondaryQrGroups().each(function() {
+        $(this).find('.qr--button').each(function() {
+            $popupContent.append(createScriptPopupRow(this, 'chatqr', qrByDom, api));
         });
     });
 
-    // script 버튼 앞에 추가
-    const $containers = $('div[id^="script_container_"]');
-    $containers.each(function() {
-        const $container = $(this);
-        const containerId = $container.attr('id');
-        $container.find('.qr--button').each(function() {
-            const $btn = $(this);
-            $btn.attr('data-origin-id', containerId);
-            $btn.attr('data-origin-type', 'script');
-            $popupContent.prepend($btn);
+    const $firstChatQr = $popupContent.children('[data-origin-type="chatqr"]').first();
+    $('div[id^="script_container_"]').each(function() {
+        $(this).find('.qr--button').each(function() {
+            const $row = createScriptPopupRow(this, 'script', qrByDom, api);
+            if ($firstChatQr.length) $firstChatQr.before($row);
+            else $popupContent.append($row);
         });
     });
-
-    updatePopupContentHeight();
 }
-
 function getHelperReplacementSettings() {
     if (!settings.helperReplacement || typeof settings.helperReplacement !== 'object') {
         settings.helperReplacement = {};
@@ -660,6 +602,7 @@ function replacePlaceholdersWithSavedNames(text) {
 // 6.5. QR 도우미 팝업
 // =================================================================================
 function openQrHelperPopup() {
+    popupRequestId++;
     const $popup = $('#qr-popup-container');
     const $headerTitle = $('#qr-popup-header-title');
     
@@ -672,19 +615,8 @@ function openQrHelperPopup() {
 
     const $popupContent = $('#qr-popup-content');
 
-    if (settings.mobileMode) {
-        $popup.addClass('mobile-layout');
-        $popup.css({ top: '', left: '', width: '', height: '' });
-    } else {
-        $popup.removeClass('mobile-layout');
-        $popup.css({
-            top: settings.pos.top,
-            left: settings.pos.left,
-            width: settings.width + 'px',
-            height: settings.height + 'px',
-        });
-    }
-    $popup.show();
+    applyPopupLayout($popup);
+    $popup.css('display', 'flex');
     $headerTitle.text("QR 도우미");
 
     // chatqr 포함 전부 제거, Chat QR 버튼 없이 도우미 전용 내용만 표시
@@ -705,10 +637,8 @@ function openQrHelperPopup() {
         }
 
         if (text.includes('{{char}}') || text.includes('{{user}}')) {
-            const TEMP_TOKEN = '###_QR_TEMP_TOKEN_###';
-            text = text.replaceAll('{{char}}', TEMP_TOKEN);
-            text = text.replaceAll('{{user}}', '{{char}}');
-            text = text.replaceAll(TEMP_TOKEN, '{{user}}');
+            text = text.replace(/\{\{char\}\}|\{\{user\}\}/g, match =>
+                match === '{{char}}' ? '{{user}}' : '{{char}}');
 
             $textarea.val(text);
             $textarea.trigger('input'); 
@@ -783,7 +713,7 @@ function openQrHelperPopup() {
     languages.forEach(lang => {
         const $btn = $(`<button class="qr-lang-btn">${lang.label}</button>`);
         $btn.on('click', function() {
-            navigator.clipboard.writeText(lang.text).then(() => {
+            copyToClipboard(lang.text).then(() => {
                 if (window.toastr) window.toastr.success(`"${lang.text}" 복사 완료`);
                 
                 const originalText = $btn.text();
@@ -793,6 +723,9 @@ function openQrHelperPopup() {
                     $btn.text(originalText);
                     $btn.removeClass('copied');
                 }, 1000);
+            }).catch(error => {
+                console.error(`[${extensionName}] 복사 실패:`, error);
+                window.toastr?.error('복사에 실패했습니다.');
             });
         });
         $langGrid.append($btn);
@@ -801,7 +734,6 @@ function openQrHelperPopup() {
     $langSection.append($langGrid);
     $popupContent.append($langSection);
 
-    updatePopupContentHeight();
 }
 
 // =================================================================================
@@ -856,9 +788,9 @@ function handleCtxMenuClick(event) {
     const $item = $(event.currentTarget);
     const command = $item.attr('title');
 
-    if (command && command.startsWith('/qr-set')) {
+    if (command?.startsWith('/qr-set ')) {
         event.stopPropagation();
-        $('.list-group.ctx-menu').remove();
+        $item.closest('.list-group.ctx-menu').remove();
         setTimeout(() => openQrSetPopup(command), 0);
     }
 }
@@ -872,19 +804,20 @@ function handleCtxMenuClick(event) {
 	}
 	settings = extension_settings[extensionName];
 
-	if (!settings.pos || !settings.pos.top) settings.pos = DEFAULT_POS;
-	if (!settings.width) settings.width = DEFAULT_SIZE.width;
-	if (!settings.height) settings.height = DEFAULT_SIZE.height;
+    if (!settings.pos || !Number.isFinite(settings.pos.top) || !Number.isFinite(settings.pos.left)) {
+        settings.pos = { ...DEFAULT_POS };
+    }
+    if (!Number.isFinite(settings.width) || settings.width < 100) settings.width = DEFAULT_SIZE.width;
+    if (!Number.isFinite(settings.height) || settings.height < 100) settings.height = DEFAULT_SIZE.height;
 	if (!settings.themeColor) settings.themeColor = DEFAULT_THEME_COLOR;
 	if (typeof settings.lockSize === 'undefined') settings.lockSize = false;
 	if (typeof settings.mobileMode === 'undefined') settings.mobileMode = false;
 	if (typeof settings.showQrHelper === 'undefined') settings.showQrHelper = true;
+    if (!settings.originalScriptButtons || typeof settings.originalScriptButtons !== 'object') settings.originalScriptButtons = {};
     getHelperReplacementSettings();
 
     applyThemeColor(settings.themeColor);
     
-
-    injectStyles();
 
     createQrPopup();
     createToolbarButton(); 
@@ -905,8 +838,10 @@ function handleCtxMenuClick(event) {
             window.jQuery('#qr_popup_mobile_mode').on('change', onMobileModeChange);
 
             window.jQuery('#qr_popup_show_helper').on('change', onShowHelperChange);
+            window.jQuery('#qr_popup_original_buttons').on('change', 'input[type="checkbox"]', onScriptButtonLocationChange);
 
             loadSettingsUI();
+            refreshScriptButtonSettings();
             
         } catch (error) {
             console.warn(`[${extensionName}] settings.html 불러오기 실패.`, error);
@@ -923,13 +858,13 @@ function resetPopupPosition() {
     const winWidth = $(window).width();
     const winHeight = $(window).height();
     
-    const pWidth = settings.width || 400;
-    const pHeight = settings.height || 250;
+    const pWidth = $popup.is(':visible') ? $popup.outerWidth() : Math.min(settings.width, winWidth);
+    const pHeight = $popup.is(':visible') ? $popup.outerHeight() : Math.min(settings.height, winHeight);
     const newLeft = Math.max(0, (winWidth - pWidth) / 2);
     const newTop = Math.max(0, (winHeight - pHeight) / 2);
 
     settings.pos = { top: newTop, left: newLeft };
-    if ($popup.length) $popup.css({ top: newTop, left: newLeft });
+    if ($popup.length && !settings.mobileMode) $popup.css({ top: newTop, left: newLeft });
     saveSettingsDebounced();
     alert('팝업 위치가 화면 중앙으로 초기화되었습니다.'); 
 }
@@ -1001,7 +936,6 @@ function onSettingsInput() {
         const $popup = window.jQuery('#qr-popup-container');
         if ($popup.length) {
             $popup.css(key, `${value}px`);
-            updatePopupContentHeight(); 
         }
     }
     saveSettingsDebounced();
@@ -1012,18 +946,10 @@ function onMobileModeChange() {
     settings.mobileMode = isMobileMode;
     const $popup = $('#qr-popup-container');
     
-    if (isMobileMode) {
-        $popup.addClass('mobile-layout');
-        $popup.css({ top: '', left: '', width: '', height: '' }); 
-    } else {
-        $popup.removeClass('mobile-layout');
-        $popup.css({
-            top: settings.pos.top,
-            left: settings.pos.left,
-            width: settings.width,
-            height: settings.height
-        });
-    }
-    updatePopupContentHeight();
+    applyPopupLayout($popup);
     saveSettingsDebounced();
+}
+
+function onScriptButtonLocationChange() {
+    setOriginalScriptButton($(this).val(), this.checked);
 }

@@ -55,7 +55,7 @@
                     <span class="qr-toggle-slider"></span>
                 </label>
             </div>
-			<div class="control-group" style="justify-content: space-between;">
+            <div class="control-group" style="justify-content: space-between;">
                 <div style="flex: 1;">
                     <label for="qr_popup_show_helper" style="display: block;">QR 도우미 버튼 표시</label>
                     <small style="color: #888; font-size: 0.8em;">채팅 입력창 위에 도우미 버튼(치환, 언어복사)을 표시합니다.</small>
@@ -65,6 +65,16 @@
                     <span class="qr-toggle-slider"></span>
                 </label>
             </div>
+
+            <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
+
+            <div class="control-group">
+                <div>
+                    <strong>스크립트 도구 버튼 위치</strong><br>
+                    <small style="color: #888;">켜면 원래 위치에도 표시합니다. 스크립트 도구 목록에서는 계속 전환할 수 있습니다.</small>
+                </div>
+            </div>
+            <div id="qr_popup_original_buttons" class="qr-script-location-list"></div>
 
             <hr style="border: 0; border-top: 1px dashed #eee; margin: 10px 0;">
 
@@ -128,5 +138,21 @@
     border-radius: 6px;
     border: 1px solid #ccc;
     text-align: center;
+}
+.openqrsetinpopup-settings .qr-script-location-list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+.openqrsetinpopup-settings .qr-script-location-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+}
+.openqrsetinpopup-settings .qr-script-location-row > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 </style>
